@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import { User, UserPlus, Activity, Calendar, ChevronLeft, ChevronDown } from "lucide-react";
 
