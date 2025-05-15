@@ -17,7 +17,7 @@ export default function Navbar() {
         <Link href="/support" className="hover:underline">
           Help & support
         </Link>
-        <Link href="/logout" className="hover:underline">
+        <Link href="/login" className="hover:underline">
           Log out
         </Link>
         <div className="flex items-center space-x-1">
