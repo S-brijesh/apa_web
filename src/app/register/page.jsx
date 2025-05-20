@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
+import { db2 } from '../lib/firebase2';
 
 export default function Register() {
   const [form, setForm] = useState({
