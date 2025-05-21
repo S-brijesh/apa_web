@@ -105,7 +105,7 @@ const PatientList = ({ onSelectPatient, selectedPatientId }) => {
               {error}. Please check your Firebase configuration.
             </div>
           ) : displayedPatients.length === 0 ? (
-            <div className="text-center  py-10">
+            <div className="text-center text-gray-500 py-10">
               No patients found.
             </div>
           ) : (
@@ -124,8 +124,8 @@ const PatientList = ({ onSelectPatient, selectedPatientId }) => {
                       className={`border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${selectedPatientId === patient.id ? 'bg-indigo-50' : ''}`}
                       onClick={() => onSelectPatient(patient)}
                     >
-                      <td className="py-4 px-2">{patient.name}</td>
-                      <td className="py-4 px-2">{patient.phone}</td>
+                      <td className="py-4 px-2 text-black">{patient.name}</td>
+                      <td className="py-4 px-2 text-black">{patient.phone}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -9,6 +9,7 @@ export default function Navbar() {
         PRECOG
       </div>
 
+      
       {/* Right - Links */}
       <div className="flex items-center space-x-6 text-sm text-indigo-700">
         <Link href="/" className="hover:underline font-semibold">
