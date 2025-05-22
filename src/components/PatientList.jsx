@@ -95,7 +95,7 @@ const PatientList = ({ onSelectPatient, selectedPatientId }) => {
               No patients found.
             </div>
           ) : (
-            <div className="max-h-[60vh] overflow-y-auto pr-3">
+            <div className="max-h-[90vh] overflow-y-auto pr-3">
               <table className="w-full">
                 <thead className="sticky top-0 bg-white">
                   <tr className="border-b border-gray-200">
