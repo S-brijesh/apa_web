@@ -65,21 +65,6 @@ const PatientList = ({ onSelectPatient, selectedPatientId }) => {
     fetchPatients();
   };
 
-  // Placeholder for empty state when no Firebase data is available
-  const patientPlaceholders = loading ? [] : [
-    { id: 'p1', name: 'Abhishek Jadhav', phone: '9876543210' },
-    { id: 'p2', name: 'Baban Patil', phone: '9876543210' },
-    { id: 'p3', name: 'Chetan Yadav', phone: '9876543210' },
-    { id: 'p4', name: 'Dave Bhandari', phone: '9876543210' },
-    { id: 'p5', name: 'Esha Dhar', phone: '9876543210' },
-    { id: 'p6', name: 'Farhan Akhtar', phone: '9876543210' },
-    { id: 'p7', name: 'Gouri Katte', phone: '9876543210' },
-    { id: 'p8', name: 'Harsh Satam', phone: '9876543210' },
-  ];
-  
-  // Use actual Firebase data if available, otherwise use placeholders
-  const displayedPatients = patients.length > 0 ? patients : patientPlaceholders;
-
   return (
     <div className="max-w-full bg-white rounded-lg shadow-lg overflow-hidden p-5 h-full">
       <header className="mb-6 flex items-center">
@@ -95,16 +80,17 @@ const PatientList = ({ onSelectPatient, selectedPatientId }) => {
       </div>
       
       <div className="flex">
-        <div className="flex-grow">
+        <div className="flex-1">
           {loading ? (
             <div className="flex justify-center items-center h-64">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+              <p className="ml-4 text-gray-600">Loading patients...</p>
             </div>
           ) : error ? (
             <div className="text-center text-red-500 py-10">
               {error}. Please check your Firebase configuration.
             </div>
-          ) : displayedPatients.length === 0 ? (
+          ) : patients.length === 0 ? (
             <div className="text-center text-gray-500 py-10">
               No patients found.
             </div>
@@ -118,7 +104,7 @@ const PatientList = ({ onSelectPatient, selectedPatientId }) => {
                   </tr>
                 </thead>
                 <tbody>
-                  {displayedPatients.map((patient) => (
+                  {patients.map((patient) => (
                     <tr 
                       key={patient.id} 
                       className={`border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${selectedPatientId === patient.id ? 'bg-indigo-50' : ''}`}
