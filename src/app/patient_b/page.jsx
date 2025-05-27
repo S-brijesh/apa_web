@@ -10,6 +10,7 @@ const Index = () => {
   const [selectedPatient, setSelectedPatient] = useState(null);
 
   const handleSelectPatient = (patient) => {
+    console.log("patient :");
     setSelectedPatient(patient);
   };
 
