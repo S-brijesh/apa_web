@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
-import { getStorage, ref, listAll, getMetadata } from 'firebase/storage';
+import { ref, listAll, getMetadata } from 'firebase/storage';
+import { storage2 } from '@/app/lib/firebase2';
 
 const PatientDetail = ({ patient, onBack }) => {
   const [reportCount, setReportCount] = useState(null);
@@ -13,47 +14,41 @@ const PatientDetail = ({ patient, onBack }) => {
 
       try {
         setLoading(true);
-        const storage = getStorage();
-        const folderRef = ref(storage, `${patient.docId}/`);
+        const folderRef = ref(storage2, `${patient.docId}/`);
         const result = await listAll(folderRef);
-        
+
+        // ✅ Check if folder exists (has items or subfolders)
+        if (result.prefixes.length > 0 || result.items.length > 0) {
+          console.log('ha mila');
+        } else {
+          console.log('nahi mila');
+          setReportCount(0);
+          setTests([]);
+          setLoading(false);
+          return;
+        }
+
         setReportCount(result.items.length);
 
-        // Fetch metadata for each file to get test details
         const testPromises = result.items.map(async (itemRef) => {
           try {
             const metadata = await getMetadata(itemRef);
-            
-            // Extract test information from filename or metadata
             const fileName = itemRef.name;
             const fileExtension = fileName.split('.').pop();
-            
-            // Parse filename to extract test details
-            // Assuming filename format like: "TestName_YYYY-MM-DD_HH-MM.extension"
-            // or just use the filename as test name
             const nameWithoutExtension = fileName.replace(`.${fileExtension}`, '');
             const parts = nameWithoutExtension.split('_');
-            
+
             let testName = parts[0] || 'Unknown Test';
             let testDate = 'N/A';
             let testTime = 'N/A';
-            
-            // Try to parse date and time from filename
-            if (parts.length >= 2) {
-              const datePart = parts[1];
-              if (datePart && datePart.match(/^\d{4}-\d{2}-\d{2}$/)) {
-                testDate = datePart;
-              }
+
+            if (parts.length >= 2 && /^\d{4}-\d{2}-\d{2}$/.test(parts[1])) {
+              testDate = parts[1];
             }
-            
-            if (parts.length >= 3) {
-              const timePart = parts[2];
-              if (timePart && timePart.match(/^\d{2}-\d{2}$/)) {
-                testTime = timePart.replace('-', ':');
-              }
+            if (parts.length >= 3 && /^\d{2}-\d{2}$/.test(parts[2])) {
+              testTime = parts[2].replace('-', ':');
             }
-            
-            // Use file creation time as fallback
+
             const createdDate = new Date(metadata.timeCreated);
             if (testDate === 'N/A') {
               testDate = createdDate.toISOString().split('T')[0];
@@ -67,14 +62,13 @@ const PatientDetail = ({ patient, onBack }) => {
               name: testName,
               date: testDate,
               time: testTime,
-              fileName: fileName,
+              fileName,
               fileType: fileExtension,
               size: metadata.size,
               created: metadata.timeCreated,
-              downloadUrl: itemRef.fullPath // Store path for potential download
+              downloadUrl: itemRef.fullPath
             };
           } catch (error) {
-            console.error(`Error fetching metadata for ${itemRef.name}:`, error);
             return {
               id: itemRef.fullPath,
               name: itemRef.name.split('.')[0] || 'Unknown Test',
@@ -90,16 +84,14 @@ const PatientDetail = ({ patient, onBack }) => {
         });
 
         const testsData = await Promise.all(testPromises);
-        
-        // Sort tests by creation date (newest first)
         testsData.sort((a, b) => new Date(b.created) - new Date(a.created));
-        
+
         setTests(testsData);
-        setLoading(false);
       } catch (error) {
         console.error('Error fetching tests from storage:', error);
         setReportCount(0);
         setTests([]);
+      } finally {
         setLoading(false);
       }
     };
@@ -115,14 +107,7 @@ const PatientDetail = ({ patient, onBack }) => {
     );
   }
 
-  const {
-    name,
-    age,
-    gender,
-    height,
-    weight,
-    bmi
-  } = patient;
+  const { name, age, gender, height, weight, bmi } = patient;
 
   const formatFileSize = (bytes) => {
     if (bytes === 0) return '0 Bytes';
@@ -134,7 +119,6 @@ const PatientDetail = ({ patient, onBack }) => {
 
   return (
     <div className="bg-indigo-200 rounded-lg overflow-hidden shadow-lg h-full">
-      {/* Header */}
       <div className="p-4 bg-indigo-300 flex items-center">
         <button className="mr-4 text-indigo-800" onClick={onBack}>
           <ArrowLeft size={24} />
@@ -142,7 +126,6 @@ const PatientDetail = ({ patient, onBack }) => {
         <h2 className="text-xl font-bold text-center text-white flex-1 mr-6">PATIENT DETAILS</h2>
       </div>
 
-      {/* Patient Info */}
       <div className="p-4 bg-blue-100 m-4 rounded-lg">
         <div className="grid grid-cols-2 gap-2 text-black">
           <p><span className="font-semibold">Name:</span> {name || 'N/A'}</p>
@@ -154,7 +137,6 @@ const PatientDetail = ({ patient, onBack }) => {
         </div>
       </div>
 
-      {/* Test History */}
       <div className="p-4">
         <div className="flex justify-between items-center mb-2">
           <h3 className="text-lg font-bold">PATIENT TEST HISTORY</h3>
@@ -174,9 +156,7 @@ const PatientDetail = ({ patient, onBack }) => {
               <div key={test.id || index} className="bg-blue-100 p-4 rounded-lg">
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
-                    <p className="text-blue-800 font-medium text-lg">
-                      {test.name}
-                    </p>
+                    <p className="text-blue-800 font-medium text-lg">{test.name}</p>
                     <div className="text-sm text-gray-600 mt-1">
                       <p>Date: {test.date} | Time: {test.time}</p>
                       <p>File: {test.fileName} ({formatFileSize(test.size)})</p>
