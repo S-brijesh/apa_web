@@ -1,103 +1,191 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { ref, listAll, getMetadata } from 'firebase/storage';
-import { storage2 } from '@/app/lib/firebase2';
+
+import { storage } from '@/app/lib/firebase2';
 
 const PatientDetail = ({ patient, onBack }) => {
   const [reportCount, setReportCount] = useState(null);
-  const [tests, setTests] = useState([]);
+  const [testsByDate, setTestsByDate] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  // Function to convert timestamp to readable date
+  const convertTimestampToDate = (rawName) => {
+  try {
+    // Extract number between dollar signs, e.g., "$1736233109$" → "1736233109"
+    const match = rawName.match(/\$(\d+)\$/);
+    const timestamp = match ? match[1] : rawName;
+    const numTimestamp = parseInt(timestamp);
+
+    const date = numTimestamp.toString().length === 10
+      ? new Date(numTimestamp * 1000)
+      : new Date(numTimestamp);
+
+    return {
+      date: date.toLocaleDateString(),
+      time: date.toLocaleTimeString(),
+      fullDateTime: date.toLocaleString(),
+      cleanTimestamp: timestamp
+    };
+  } catch (error) {
+    return {
+      date: rawName,
+      time: '',
+      fullDateTime: rawName,
+      cleanTimestamp: rawName
+    };
+  }
+};
+
+
+  // OPTIMIZATION 1: Parallel Processing with Promise.all
+  const fetchTestDataOptimized = async (patientId) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const patientRef = ref(storage, patientId);
+      const patientResult = await listAll(patientRef);
+
+      if (patientResult.prefixes.length === 0) {
+        setTestsByDate([]);
+        setReportCount(0);
+        return;
+      }
+
+      console.log(`🔍 Found ${patientResult.prefixes.length} date folders for patient: ${patientId}`);
+
+      // OPTIMIZATION 2: Process all date folders in parallel
+      const datePromises = patientResult.prefixes.map(async (dateFolderRef) => {
+        const dateTimestamp = dateFolderRef.name;
+        const dateInfo = convertTimestampToDate(dateTimestamp);
+        
+        try {
+          const dateResult = await listAll(dateFolderRef);
+          
+          // OPTIMIZATION 3: Process all test folders in parallel for this date
+          const testPromises = dateResult.prefixes.map(async (testFolderRef) => {
+            const testTimestamp = testFolderRef.name;
+            const testInfo = convertTimestampToDate(testTimestamp);
+            
+            try {
+              const testResult = await listAll(testFolderRef);
+              
+              // OPTIMIZATION 4: Get metadata in parallel, but limit concurrency
+              const filePromises = testResult.items.slice(0, 10).map(async (fileRef) => {
+                try {
+                  // Use Promise.race for timeout on slow metadata calls
+                  const metadataPromise = getMetadata(fileRef);
+                  const timeoutPromise = new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Metadata timeout')), 3000)
+                  );
+                  
+                  const metadata = await Promise.race([metadataPromise, timeoutPromise]);
+                  
+                  return {
+                    fileName: fileRef.name,
+                    size: metadata.size,
+                    fileType: fileRef.name.split('.').pop() || 'unknown',
+                    fullPath: fileRef.fullPath,
+                    contentType: metadata.contentType || 'unknown'
+                  };
+                } catch (metadataError) {
+                  // Fallback without metadata
+                  return {
+                    fileName: fileRef.name,
+                    size: 0,
+                    fileType: fileRef.name.split('.').pop() || 'unknown',
+                    fullPath: fileRef.fullPath,
+                    contentType: 'unknown'
+                  };
+                }
+              });
+
+              const testFiles = await Promise.all(filePromises);
+              
+              return {
+                id: testInfo.cleanTimestamp,
+                name: `Test ${testInfo.time}`,
+                date: testInfo.date,
+                time: testInfo.time,
+                timestamp: testInfo.cleanTimestamp,
+                files: testFiles,
+                fileCount: testFiles.length,
+                totalFiles: testResult.items.length // Show if there are more files
+              };
+            } catch (testError) {
+              console.warn(`Error processing test ${testTimestamp}:`, testError);
+              return {
+                id: testTimestamp,
+                name: `Test ${testInfo.time}`,
+                date: testInfo.date,
+                time: testInfo.time,
+                timestamp: testTimestamp,
+                files: [],
+                fileCount: 0,
+                error: true
+              };
+            }
+          });
+
+          const testsForThisDate = await Promise.all(testPromises);
+          
+          // Filter out failed tests and sort
+          const validTests = testsForThisDate.filter(test => test).sort((a, b) => parseInt(b.timestamp) - parseInt(a.timestamp));
+
+          return {
+            dateTimestamp: dateInfo.cleanTimestamp,
+            date: dateInfo.date,
+            fullDateTime: dateInfo.fullDateTime,
+            tests: validTests,
+            testCount: validTests.length
+          };
+        } catch (dateError) {
+          console.warn(`Error processing date folder ${dateTimestamp}:`, dateError);
+          return null;
+        }
+      });
+
+      // Wait for all date processing to complete
+      const allTestsByDate = await Promise.all(datePromises);
+      
+      // Filter out failed dates and sort
+      const validTestsByDate = allTestsByDate
+        .filter(dateGroup => dateGroup && dateGroup.tests.length > 0)
+        .sort((a, b) => parseInt(b.dateTimestamp) - parseInt(a.dateTimestamp));
+
+      const totalTestCount = validTestsByDate.reduce((sum, dateGroup) => sum + dateGroup.testCount, 0);
+
+      setTestsByDate(validTestsByDate);
+      setReportCount(totalTestCount);
+      
+      console.log(`📊 Optimized fetch completed: ${validTestsByDate.length} date folders with ${totalTestCount} total tests`);
+      
+    } catch (error) {
+      console.error("❌ Error fetching test data:", error);
+      setError(error.message);
+      setReportCount(0);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // OPTIMIZATION 5: Lazy loading with progressive display
+  const [showAllFiles, setShowAllFiles] = useState({});
+  
+  const toggleShowAllFiles = (testId) => {
+    setShowAllFiles(prev => ({
+      ...prev,
+      [testId]: !prev[testId]
+    }));
+  };
 
   useEffect(() => {
-    const fetchTestsFromStorage = async () => {
-      if (!patient?.docId) return;
-
-      try {
-        setLoading(true);
-        const folderRef = ref(storage2, `${patient.docId}/`);
-        const result = await listAll(folderRef);
-
-        // ✅ Check if folder exists (has items or subfolders)
-        if (result.prefixes.length > 0 || result.items.length > 0) {
-          console.log('ha mila');
-        } else {
-          console.log('nahi mila');
-          setReportCount(0);
-          setTests([]);
-          setLoading(false);
-          return;
-        }
-
-        setReportCount(result.items.length);
-
-        const testPromises = result.items.map(async (itemRef) => {
-          try {
-            const metadata = await getMetadata(itemRef);
-            const fileName = itemRef.name;
-            const fileExtension = fileName.split('.').pop();
-            const nameWithoutExtension = fileName.replace(`.${fileExtension}`, '');
-            const parts = nameWithoutExtension.split('_');
-
-            let testName = parts[0] || 'Unknown Test';
-            let testDate = 'N/A';
-            let testTime = 'N/A';
-
-            if (parts.length >= 2 && /^\d{4}-\d{2}-\d{2}$/.test(parts[1])) {
-              testDate = parts[1];
-            }
-            if (parts.length >= 3 && /^\d{2}-\d{2}$/.test(parts[2])) {
-              testTime = parts[2].replace('-', ':');
-            }
-
-            const createdDate = new Date(metadata.timeCreated);
-            if (testDate === 'N/A') {
-              testDate = createdDate.toISOString().split('T')[0];
-            }
-            if (testTime === 'N/A') {
-              testTime = createdDate.toTimeString().split(' ')[0].substring(0, 5);
-            }
-
-            return {
-              id: itemRef.fullPath,
-              name: testName,
-              date: testDate,
-              time: testTime,
-              fileName,
-              fileType: fileExtension,
-              size: metadata.size,
-              created: metadata.timeCreated,
-              downloadUrl: itemRef.fullPath
-            };
-          } catch (error) {
-            return {
-              id: itemRef.fullPath,
-              name: itemRef.name.split('.')[0] || 'Unknown Test',
-              date: 'N/A',
-              time: 'N/A',
-              fileName: itemRef.name,
-              fileType: itemRef.name.split('.').pop() || 'unknown',
-              size: 0,
-              created: new Date().toISOString(),
-              downloadUrl: itemRef.fullPath
-            };
-          }
-        });
-
-        const testsData = await Promise.all(testPromises);
-        testsData.sort((a, b) => new Date(b.created) - new Date(a.created));
-
-        setTests(testsData);
-      } catch (error) {
-        console.error('Error fetching tests from storage:', error);
-        setReportCount(0);
-        setTests([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchTestsFromStorage();
-  }, [patient?.docId]);
+    if (patient && patient.id) {
+      fetchTestDataOptimized(patient.id);
+    }
+  }, [patient]);
 
   if (!patient) {
     return (
@@ -107,7 +195,15 @@ const PatientDetail = ({ patient, onBack }) => {
     );
   }
 
-  const { name, age, gender, height, weight, bmi } = patient;
+  const {
+    name,
+    age,
+    gender,
+    height,
+    weight,
+    bmi,
+    id
+  } = patient;
 
   const formatFileSize = (bytes) => {
     if (bytes === 0) return '0 Bytes';
@@ -128,6 +224,7 @@ const PatientDetail = ({ patient, onBack }) => {
 
       <div className="p-4 bg-blue-100 m-4 rounded-lg">
         <div className="grid grid-cols-2 gap-2 text-black">
+          {/* <p><span className="font-semibold">ID:</span> {id || 'N/A'}</p> */}
           <p><span className="font-semibold">Name:</span> {name || 'N/A'}</p>
           <p><span className="font-semibold">Age:</span> {age || 'N/A'}</p>
           <p><span className="font-semibold">Gender:</span> {gender || 'N/A'}</p>
@@ -141,7 +238,7 @@ const PatientDetail = ({ patient, onBack }) => {
         <div className="flex justify-between items-center mb-2">
           <h3 className="text-lg font-bold">PATIENT TEST HISTORY</h3>
           <button className="bg-blue-600 text-white px-4 py-1 rounded-lg text-sm">
-            {reportCount === null ? 'Loading...' : `${reportCount} report${reportCount !== 1 ? 's' : ''}`}
+            {reportCount === null ? 'Loading...' : `${reportCount} test${reportCount !== 1 ? 's' : ''}`}
           </button>
         </div>
 
@@ -150,20 +247,71 @@ const PatientDetail = ({ patient, onBack }) => {
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
             <p className="ml-3 text-gray-600">Loading tests...</p>
           </div>
-        ) : tests.length > 0 ? (
-          <div className="space-y-2 max-h-96 overflow-y-auto">
-            {tests.map((test, index) => (
-              <div key={test.id || index} className="bg-blue-100 p-4 rounded-lg">
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <p className="text-blue-800 font-medium text-lg">{test.name}</p>
-                    <div className="text-sm text-gray-600 mt-1">
-                      <p>Date: {test.date} | Time: {test.time}</p>
-                      <p>File: {test.fileName} ({formatFileSize(test.size)})</p>
-                      <p>Type: {test.fileType.toUpperCase()}</p>
+        ) : error ? (
+          <div className="text-center py-8">
+            <p className="text-red-600">Error loading tests: {error}</p>
+            <button 
+              onClick={() => fetchTestDataOptimized(patient.id)}
+              className="mt-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700"
+            >
+              Retry
+            </button>
+          </div>
+        ) : testsByDate.length > 0 ? (
+          <div className="space-y-4 max-h-96 overflow-y-auto">
+            {testsByDate.map((dateGroup, dateIndex) => (
+              <div key={dateGroup.dateTimestamp} className="border border-blue-300 rounded-lg overflow-hidden">
+                {/* Date Header */}
+                <div className="bg-blue-200 px-4 py-2">
+                  <h4 className="font-semibold text-blue-900">
+                    {dateGroup.date} ({dateGroup.testCount} test{dateGroup.testCount !== 1 ? 's' : ''})
+                  </h4>
+                </div>
+                
+                {/* Tests for this date */}
+                <div className="space-y-2 p-2">
+                  {dateGroup.tests.map((test, testIndex) => (
+                    <div key={test.id} className="bg-blue-100 p-3 rounded-lg">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <p className="text-blue-800 font-medium text-lg">{test.name}</p>
+                          <div className="text-sm text-gray-600 mt-1">
+                            <p>Time: {test.time}</p>
+                            <p>Test ID: {test.id}</p>
+                            {test.error && (
+                              <p className="text-red-600 text-xs">⚠️ Error loading some data</p>
+                            )}
+                            {test.files.length > 0 ? (
+                              <div className="mt-2">
+                                <div className="flex justify-between items-center">
+                                  <p className="font-medium">
+                                    Files ({test.fileCount}
+                                    {test.totalFiles > test.fileCount && ` of ${test.totalFiles}`})
+                                  </p>
+                                  {test.files.length > 3 && (
+                                    <button 
+                                      onClick={() => toggleShowAllFiles(test.id)}
+                                      className="text-xs text-blue-600 hover:underline"
+                                    >
+                                      {showAllFiles[test.id] ? 'Show Less' : 'Show All'}
+                                    </button>
+                                  )}
+                                </div>
+                                {test.files.slice(0, showAllFiles[test.id] ? undefined : 3).map((file, fileIndex) => (
+                                  <div key={fileIndex} className="ml-2 text-xs">
+                                    <p>• {file.fileName} ({formatFileSize(file.size)}) - {file.fileType.toUpperCase()}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-orange-600 text-xs mt-1">No files found in this test folder</p>
+                            )}
+                          </div>
+                        </div>
+                        <ArrowLeft className="transform rotate-180 text-blue-800 mt-1" size={20} />
+                      </div>
                     </div>
-                  </div>
-                  <ArrowLeft className="transform rotate-180 text-blue-800 mt-1" size={20} />
+                  ))}
                 </div>
               </div>
             ))}
@@ -172,7 +320,7 @@ const PatientDetail = ({ patient, onBack }) => {
           <div className="text-center py-8">
             <p className="text-gray-600">No test reports found in storage.</p>
             <p className="text-sm text-gray-500 mt-1">
-              Upload test reports to folder: {patient.docId}
+              Upload test reports to folder structure: patients/{patient.name}/[date]/[test]
             </p>
           </div>
         )}

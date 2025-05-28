@@ -15,6 +15,7 @@ const PatientList = ({ onSelectPatient, selectedPatientId }) => {
     try {
       setLoading(true);
       const data = await getPatients();
+      console.log(data);
       setPatients(data);
       setLoading(false);
     } catch (err) {
