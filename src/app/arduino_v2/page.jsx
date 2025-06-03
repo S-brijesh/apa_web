@@ -23,6 +23,7 @@ export default function ArduinoPage() {
   const lastRateUpdateRef = useRef(Date.now());
   const dataCountRef = useRef(0);
   const lastScaleUpdateRef = useRef(Date.now());
+  const readLoopRef = useRef(null);
 
   // Calculate dynamic Y-axis range for better visualization
   const calculateYAxisRange = useCallback((data, valueKey) => {
@@ -124,11 +125,11 @@ export default function ArduinoPage() {
     }
   }, [lastUpdateTime, autoZoom, calculateYAxisRange]);
 
-  // Optimized port reading with minimal async overhead
+  // Optimized port reading with proper error handling
   const listenToPort = useCallback(async (reader) => {
-    const readStream = async () => {
+    const readLoop = async () => {
       try {
-        while (isReading) {
+        while (isReading && reader) {
           const { value, done } = await reader.read();
           if (done) break;
           
@@ -137,37 +138,19 @@ export default function ArduinoPage() {
           }
         }
       } catch (err) {
-        console.error('Read error:', err);
+        console.log('Read loop stopped:', err.message);
+        // Don't throw error, just exit gracefully
       }
     };
 
-    readStream();
+    readLoopRef.current = readLoop();
+    return readLoopRef.current;
   }, [parseIncomingData, isReading]);
 
   const connectToPort = async () => {
     try {
-      // Check if we already have a port and try to close it first
-      if (port) {
-        console.log('Existing port detected, closing first...');
-        await stopCommunication();
-        // Wait a bit for cleanup
-        await new Promise(resolve => setTimeout(resolve, 200));
-      }
-
       console.log('Requesting serial port...');
       const selectedPort = await navigator.serial.requestPort();
-      
-      // Check if port is already open
-      if (selectedPort.readable || selectedPort.writable) {
-        console.log('Port appears to be open, attempting to close...');
-        try {
-          await selectedPort.close();
-          // Wait for port to fully close
-          await new Promise(resolve => setTimeout(resolve, 300));
-        } catch (e) {
-          console.log('Error closing existing port:', e);
-        }
-      }
       
       console.log('Opening port...');
       // Optimized serial settings for real-time performance
@@ -181,11 +164,11 @@ export default function ArduinoPage() {
 
       console.log('Setting up streams...');
       const textDecoder = new TextDecoderStream();
-      selectedPort.readable.pipeTo(textDecoder.writable);
+      const readableStreamClosed = selectedPort.readable.pipeTo(textDecoder.writable);
       const reader = textDecoder.readable.getReader();
 
       const textEncoder = new TextEncoderStream();
-      textEncoder.readable.pipeTo(selectedPort.writable);
+      const writableStreamClosed = textEncoder.readable.pipeTo(selectedPort.writable);
       const writer = textEncoder.writable.getWriter();
 
       setPort(selectedPort);
@@ -224,85 +207,76 @@ export default function ArduinoPage() {
 
   const requestData = async () => {
     if (writer) {
-      await writer.write('$');
+      try {
+        await writer.write('$');
+      } catch (error) {
+        console.error('Error sending data request:', error);
+      }
     }
   };
 
   const stopCommunication = async () => {
     console.log('Starting disconnect process...');
+    
+    // Step 1: Stop the reading loop first
     setIsReading(false);
     
+    // Wait for any pending reads to complete
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
     try {
-      // Step 1: Send stop command and close writer
+      // Step 2: Send stop command if writer is available
       if (writer) {
         try {
           await writer.write('D');
           console.log('Stop command sent');
         } catch (e) {
-          console.log('Error sending stop command:', e);
-        }
-        
-        try {
-          await writer.releaseLock();
-          console.log('Writer lock released');
-        } catch (e) {
-          console.log('Writer release error:', e);
+          console.log('Error sending stop command:', e.message);
         }
       }
       
-      // Step 2: Cancel reader and release lock
+      // Step 3: Release writer lock and close
+      if (writer) {
+        try {
+          await writer.close();
+          console.log('Writer closed');
+        } catch (e) {
+          console.log('Writer close error:', e.message);
+        }
+      }
+      
+      // Step 4: Cancel and release reader
       if (reader) {
         try {
           await reader.cancel();
           console.log('Reader cancelled');
         } catch (e) {
-          console.log('Reader cancel error:', e);
-        }
-        
-        try {
-          await reader.releaseLock();
-          console.log('Reader lock released');
-        } catch (e) {
-          console.log('Reader release error:', e);
+          console.log('Reader cancel error:', e.message);
         }
       }
       
-      // Step 3: Small delay to ensure streams are properly closed
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Step 5: Wait for streams to fully close
+      await new Promise(resolve => setTimeout(resolve, 200));
       
-      // Step 4: Close the port
+      // Step 6: Close the port
       if (port) {
         try {
           await port.close();
           console.log('Port closed successfully');
         } catch (e) {
-          console.log('Port close error:', e);
-          // Force close by setting readable/writable to null
-          if (port.readable) {
-            try {
-              await port.readable.cancel();
-            } catch (err) {
-              console.log('Readable cancel error:', err);
-            }
-          }
-          if (port.writable) {
-            try {
-              await port.writable.abort();
-            } catch (err) {
-              console.log('Writable abort error:', err);
-            }
-          }
+          console.log('Port close error:', e.message);
         }
       }
       
     } catch (error) {
       console.error('Error during disconnect:', error);
     } finally {
-      // Step 5: Reset all state regardless of errors
+      // Step 7: Reset all state regardless of errors
       setReader(null);
       setWriter(null);
       setPort(null);
       setIsReading(false);
+      readLoopRef.current = null;
       console.log('Disconnect completed - all states reset');
     }
   };
