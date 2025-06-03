@@ -6,10 +6,10 @@ import { useRouter } from "next/navigation"; // For Next.js App Router
 import { User, UserPlus, Activity } from "lucide-react";
 import { db2 } from "../lib/firebase2";
 import { collection, addDoc, Timestamp } from "firebase/firestore";
-import { useRouter } from 'next/navigation';
+// import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-const router = useRouter();
-
+// const router = useRouter();
+import { ArrowLeft } from "lucide-react";
 export default function HealthDashboard() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [selectedButton, setSelectedButton] = useState(null);
@@ -104,6 +104,12 @@ export default function HealthDashboard() {
     setFormStep(2);
   };
 
+  const handleBack = () => {
+    setFormStep(1);
+  };
+
+
+
   const handleAdd = async () => {
     const errors = validateMedicalInfo();
     if (Object.keys(errors).length > 0) {
@@ -170,6 +176,7 @@ export default function HealthDashboard() {
                     medicalData={medicalData}
                     handleChange={handleMedicalChange}
                     handleAdd={handleAdd}
+                    handleBack={handleBack}
                     errors={medicalErrors}
                   />
                 )}
@@ -332,10 +339,19 @@ function AddPatient({ formData, handleChange, handleNext, errors }) {
   );
 }
 
-function AddPatientMedical({ medicalData, handleChange, handleAdd, errors }) {
+function AddPatientMedical({ medicalData, handleChange, handleAdd, handleBack, errors }) {
   return (
     <div className="flex justify-center items-center min-h-screen bg-[#d3d3f3]">
-      <div className="bg-white bg-opacity-30 backdrop-blur-md p-8 rounded-3xl w-[90%] max-w-md shadow-xl">
+      <div className="relative bg-white bg-opacity-30 backdrop-blur-md p-8 rounded-3xl w-[90%] max-w-md shadow-xl">
+        
+        {/* Back Arrow */}
+        <div
+          className="absolute top-4 left-4 cursor-pointer text-[#4B4BFF]"
+          onClick={handleBack}
+        >
+          <ArrowLeft className="w-6 h-6" />
+        </div>
+
         <h2 className="text-white text-center text-2xl font-semibold mb-6">ADD PATIENT</h2>
         <form className="space-y-4">
           <div className="flex justify-between gap-4">
@@ -412,7 +428,6 @@ function AddPatientMedical({ medicalData, handleChange, handleAdd, errors }) {
               onChange={handleChange}
               className="w-1/2 border-b bg-transparent text-black outline-none placeholder-black"
             />
-
             <input
               type="text"
               name="medications"
@@ -422,6 +437,14 @@ function AddPatientMedical({ medicalData, handleChange, handleAdd, errors }) {
               className="w-1/2 border-b bg-transparent text-black outline-none placeholder-black"
             />
           </div>
+
+          {/* <button
+            type="button"
+            onClick={handleBack}
+            className="w-full mt-2 bg-white text-[#4B4BFF] font-semibold py-2 rounded-xl shadow-md"
+          >
+            Back
+          </button> */}
 
           <button
             type="button"
