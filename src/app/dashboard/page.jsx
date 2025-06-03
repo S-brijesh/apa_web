@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation"; // For Next.js App Router
+// Or use: import { useNavigate } from "react-router-dom"; // For React Router
 import { User, UserPlus, Activity } from "lucide-react";
 import { db2 } from "../lib/firebase2";
 import { collection, addDoc, Timestamp } from "firebase/firestore";
@@ -9,6 +11,8 @@ export default function HealthDashboard() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [selectedButton, setSelectedButton] = useState(null);
   const [formStep, setFormStep] = useState(1);
+  const router = useRouter(); // For Next.js
+  // const navigate = useNavigate(); // For React Router
 
   const [formData, setFormData] = useState({
     name: "",
@@ -39,6 +43,13 @@ export default function HealthDashboard() {
   }, []);
 
   const handleButtonClick = (tabName, buttonId) => {
+    // Handle navigation for patients button
+    if (tabName === "patients") {
+      router.push("/patient"); // For Next.js
+      // navigate("/patients"); // For React Router
+      return;
+    }
+
     setActiveTab(tabName);
     setSelectedButton(buttonId);
     if (tabName === "add-patient") {

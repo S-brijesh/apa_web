@@ -15,7 +15,8 @@ export default function ArduinoPage() {
   const [lastUpdateTime, setLastUpdateTime] = useState(Date.now());
   const [yAxisRange1, setYAxisRange1] = useState({ min: 0, max: 100 });
   const [yAxisRange2, setYAxisRange2] = useState({ min: 0, max: 100 });
-  const [autoZoom, setAutoZoom] = useState(true);
+  const [autoZoom1, setAutoZoom1] = useState(true);
+  const [autoZoom2, setAutoZoom2] = useState(true);
 
   // Use refs for performance-critical data to avoid re-renders
   const plotDataRef = useRef([]);
@@ -25,40 +26,63 @@ export default function ArduinoPage() {
   const lastScaleUpdateRef = useRef(Date.now());
   const readLoopRef = useRef(null);
 
-  // Calculate dynamic Y-axis range for better visualization
+  // Calculate dynamic Y-axis range with improved amplitude management
   const calculateYAxisRange = useCallback((data, valueKey) => {
     if (data.length === 0) return { min: 0, max: 100 };
 
-    // Get recent data points (last 50 for responsive scaling)
-    const recentData = data.slice(-50);
-    const values = recentData.map(d => d[valueKey]).filter(v => v !== undefined);
+    // Adaptive window size based on total data points
+    let windowSize;
+    if (data.length <= 20) {
+      windowSize = data.length; // Use all points for small datasets
+    } else if (data.length <= 50) {
+      windowSize = Math.max(20, Math.floor(data.length * 0.8)); // 80% of points
+    } else if (data.length <= 100) {
+      windowSize = 40; // Fixed window for medium datasets
+    } else {
+      windowSize = 60; // Larger window for big datasets
+    }
+
+    const recentData = data.slice(-windowSize);
+    const values = recentData.map(d => d[valueKey]).filter(v => v !== undefined && !isNaN(v));
     
     if (values.length === 0) return { min: 0, max: 100 };
 
     const min = Math.min(...values);
     const max = Math.max(...values);
-    
-    // For pulse/vein data, we want to show the full amplitude clearly
     const range = max - min;
-    const padding = Math.max(range * 0.1, 5); // 10% padding or minimum 5 units
     
-    // For pulse data, ensure we show meaningful range even for small variations
-    const effectiveMin = Math.max(0, min - padding);
-    const effectiveMax = max + padding;
+    // Dynamic padding based on data characteristics
+    let padding;
+    if (range < 5) {
+      // Very small range - use fixed padding
+      padding = 5;
+    } else if (range < 20) {
+      // Small range - use 30% padding
+      padding = range * 0.3;
+    } else if (range < 50) {
+      // Medium range - use 20% padding
+      padding = range * 0.2;
+    } else {
+      // Large range - use 15% padding
+      padding = range * 0.15;
+    }
     
-    // Minimum range to avoid too zoomed in view
-    const minRange = 20;
-    if (effectiveMax - effectiveMin < minRange) {
-      const center = (effectiveMax + effectiveMin) / 2;
+    // Ensure minimum range for visibility
+    const finalMin = Math.max(0, Math.floor(min - padding));
+    const finalMax = Math.ceil(max + padding);
+    
+    // Ensure minimum visible range
+    if (finalMax - finalMin < 10) {
+      const center = (finalMax + finalMin) / 2;
       return {
-        min: Math.max(0, center - minRange / 2),
-        max: center + minRange / 2
+        min: Math.max(0, Math.floor(center - 5)),
+        max: Math.ceil(center + 5)
       };
     }
     
     return {
-      min: effectiveMin,
-      max: effectiveMax
+      min: finalMin,
+      max: finalMax
     };
   }, []);
 
@@ -101,18 +125,44 @@ export default function ArduinoPage() {
       }
     }
 
-    // Batch update plot data for better performance
+    // Batch update plot data for better performance - adaptive data retention
     if (newDataPoints.length > 0) {
-      plotDataRef.current = [...plotDataRef.current, ...newDataPoints].slice(-100); // Keep last 100 points
+      const maxPoints = plotDataRef.current.length > 100 ? 250 : 150; // Adaptive max points
+      plotDataRef.current = [...plotDataRef.current, ...newDataPoints].slice(-maxPoints);
       setPlotData([...plotDataRef.current]); // Trigger re-render with new array reference
       
-      // Update Y-axis scaling in real-time (throttled)
-      if (autoZoom && currentTime - lastScaleUpdateRef.current > 500) { // Update scale every 500ms
-        const range1 = calculateYAxisRange(plotDataRef.current, 'value1');
-        const range2 = calculateYAxisRange(plotDataRef.current, 'value2');
+      // Update Y-axis scaling in real-time with adaptive frequency
+      const scaleUpdateInterval = plotDataRef.current.length > 50 ? 150 : 300; // Faster updates for more data
+      if (currentTime - lastScaleUpdateRef.current > scaleUpdateInterval) {
+        if (autoZoom1) {
+          const range1 = calculateYAxisRange(plotDataRef.current, 'value1');
+          setYAxisRange1(prevRange => {
+            // Smoother transitions - only update if there's a meaningful change
+            const minDiff = Math.abs(prevRange.min - range1.min);
+            const maxDiff = Math.abs(prevRange.max - range1.max);
+            const threshold = plotDataRef.current.length > 30 ? 2 : 1; // Adaptive threshold
+            
+            if (minDiff > threshold || maxDiff > threshold) {
+              return range1;
+            }
+            return prevRange;
+          });
+        }
         
-        setYAxisRange1(range1);
-        setYAxisRange2(range2);
+        if (autoZoom2) {
+          const range2 = calculateYAxisRange(plotDataRef.current, 'value2');
+          setYAxisRange2(prevRange => {
+            const minDiff = Math.abs(prevRange.min - range2.min);
+            const maxDiff = Math.abs(prevRange.max - range2.max);
+            const threshold = plotDataRef.current.length > 30 ? 2 : 1;
+            
+            if (minDiff > threshold || maxDiff > threshold) {
+              return range2;
+            }
+            return prevRange;
+          });
+        }
+        
         lastScaleUpdateRef.current = currentTime;
       }
     }
@@ -123,7 +173,7 @@ export default function ArduinoPage() {
       dataCountRef.current = 0;
       lastRateUpdateRef.current = currentTime;
     }
-  }, [lastUpdateTime, autoZoom, calculateYAxisRange]);
+  }, [lastUpdateTime, autoZoom1, autoZoom2, calculateYAxisRange]);
 
   // Optimized port reading with proper error handling
   const listenToPort = useCallback(async (reader) => {
@@ -292,18 +342,27 @@ export default function ArduinoPage() {
     setYAxisRange2({ min: 0, max: 100 });
   };
 
-  const resetZoom = () => {
+  const resetZoom1 = () => {
     if (plotDataRef.current.length > 0) {
       const range1 = calculateYAxisRange(plotDataRef.current, 'value1');
-      const range2 = calculateYAxisRange(plotDataRef.current, 'value2');
       setYAxisRange1(range1);
+    } else {
+      setYAxisRange1({ min: 0, max: 100 });
+    }
+  };
+
+  const resetZoom2 = () => {
+    if (plotDataRef.current.length > 0) {
+      const range2 = calculateYAxisRange(plotDataRef.current, 'value2');
       setYAxisRange2(range2);
+    } else {
+      setYAxisRange2({ min: 0, max: 100 });
     }
   };
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-7xl mx-auto">
         <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
           <h1 className="text-2xl font-bold mb-4 text-gray-800">Real-Time Arduino Data Dashboard</h1>
           
@@ -335,26 +394,8 @@ export default function ArduinoPage() {
                 >
                   Clear Data
                 </button>
-                <button 
-                  onClick={resetZoom} 
-                  className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition-colors"
-                >
-                  Reset Zoom
-                </button>
               </div>
             )}
-          </div>
-
-          <div className="flex items-center gap-4 mt-4">
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={autoZoom}
-                onChange={(e) => setAutoZoom(e.target.checked)}
-                className="rounded"
-              />
-              <span>Auto-Zoom (Dynamic Y-axis scaling)</span>
-            </label>
           </div>
 
           <div className="flex gap-6 text-sm text-gray-600 mt-4">
@@ -364,14 +405,33 @@ export default function ArduinoPage() {
             </div>
             <div>Data Rate: {dataRate} msg/sec</div>
             <div>Plot Points: {plotData.length}</div>
-            <div>Y1 Range: {yAxisRange1.min.toFixed(0)} - {yAxisRange1.max.toFixed(0)}</div>
-            <div>Y2 Range: {yAxisRange2.min.toFixed(0)} - {yAxisRange2.max.toFixed(0)}</div>
+            <div>Max Points: {plotData.length > 100 ? '250' : '150'}</div>
           </div>
         </div>
+
         <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-          <h2 className="text-lg font-semibold mb-4 text-gray-800">Value 1 ($ Value) - Real-Time Pulse Chart</h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-semibold text-gray-800">Value 1 ($ Value) - Real-Time Pulse Chart</h2>
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={autoZoom1}
+                  onChange={(e) => setAutoZoom1(e.target.checked)}
+                  className="rounded"
+                />
+                <span>Auto-Zoom</span>
+              </label>
+              <button 
+                onClick={resetZoom1} 
+                className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-sm transition-colors"
+              >
+                Reset Zoom
+              </button>
+            </div>
+          </div>
           <div className="overflow-x-auto">
-            <LineChart width={800} height={350} data={plotData}>
+            <LineChart width={1000} height={350} data={plotData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
               <XAxis 
                 dataKey="timestamp" 
@@ -382,7 +442,7 @@ export default function ArduinoPage() {
               <YAxis 
                 stroke="#666"
                 tick={{ fontSize: 12 }}
-                domain={autoZoom ? [yAxisRange1.min, yAxisRange1.max] : ['dataMin', 'dataMax']}
+                domain={autoZoom1 ? [yAxisRange1.min, yAxisRange1.max] : ['dataMin', 'dataMax']}
                 tickFormatter={(value) => value.toFixed(0)}
               />
               <Tooltip 
@@ -412,13 +472,35 @@ export default function ArduinoPage() {
                 Current Value: <span className="font-bold text-blue-600">{plotData[plotData.length - 1]?.value1 || 0}</span>
               </span>
             )}
+            <span className="ml-4 text-xs">
+              Window: {plotData.length <= 20 ? 'All' : plotData.length <= 50 ? '80%' : plotData.length <= 100 ? '40' : '60'} pts
+            </span>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <h2 className="text-lg font-semibold mb-4 text-gray-800">Value 2 (& Value) - Real-Time Pulse Chart</h2>
+        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-semibold text-gray-800">Value 2 (& Value) - Real-Time Pulse Chart</h2>
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={autoZoom2}
+                  onChange={(e) => setAutoZoom2(e.target.checked)}
+                  className="rounded"
+                />
+                <span>Auto-Zoom</span>
+              </label>
+              <button 
+                onClick={resetZoom2} 
+                className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-sm transition-colors"
+              >
+                Reset Zoom
+              </button>
+            </div>
+          </div>
           <div className="overflow-x-auto">
-            <LineChart width={800} height={350} data={plotData}>
+            <LineChart width={1000} height={350} data={plotData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
               <XAxis 
                 dataKey="timestamp" 
@@ -429,7 +511,7 @@ export default function ArduinoPage() {
               <YAxis 
                 stroke="#666"
                 tick={{ fontSize: 12 }}
-                domain={autoZoom ? [yAxisRange2.min, yAxisRange2.max] : ['dataMin', 'dataMax']}
+                domain={autoZoom2 ? [yAxisRange2.min, yAxisRange2.max] : ['dataMin', 'dataMax']}
                 tickFormatter={(value) => value.toFixed(0)}
               />
               <Tooltip 
@@ -459,8 +541,12 @@ export default function ArduinoPage() {
                 Current Value: <span className="font-bold text-green-600">{plotData[plotData.length - 1]?.value2 || 0}</span>
               </span>
             )}
+            <span className="ml-4 text-xs">
+              Window: {plotData.length <= 20 ? 'All' : plotData.length <= 50 ? '80%' : plotData.length <= 100 ? '40' : '60'} pts
+            </span>
           </div>
         </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           <div className="bg-white rounded-lg shadow-lg p-6">
             <h2 className="text-lg font-semibold mb-4 text-gray-800">Raw Data Stream</h2>
@@ -492,13 +578,25 @@ export default function ArduinoPage() {
                       {plotData[plotData.length - 1]?.timestamp || 0}
                     </span>
                   </div>
+                  <div className="border-t pt-3 mt-3">
+                    <div className="flex justify-between text-sm">
+                      <span>Y1 Range:</span>
+                      <span>{yAxisRange1.min.toFixed(0)} - {yAxisRange1.max.toFixed(0)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span>Y2 Range:</span>
+                      <span>{yAxisRange2.min.toFixed(0)} - {yAxisRange2.max.toFixed(0)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span>Adaptive Window:</span>
+                      <span>{plotData.length <= 20 ? plotData.length : plotData.length <= 50 ? Math.floor(plotData.length * 0.8) : plotData.length <= 100 ? 40 : 60} pts</span>
+                    </div>
+                  </div>
                 </>
               )}
             </div>
           </div>
         </div>
-
-        
       </div>
     </div>
   );
