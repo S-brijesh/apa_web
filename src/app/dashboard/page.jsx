@@ -6,6 +6,9 @@ import { useRouter } from "next/navigation"; // For Next.js App Router
 import { User, UserPlus, Activity } from "lucide-react";
 import { db2 } from "../lib/firebase2";
 import { collection, addDoc, Timestamp } from "firebase/firestore";
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+const router = useRouter();
 
 export default function HealthDashboard() {
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -55,6 +58,9 @@ export default function HealthDashboard() {
     if (tabName === "add-patient") {
       setFormStep(1);
     }
+    
+      
+
   };
 
   const handlePatientChange = (e) => {
