@@ -17,6 +17,8 @@ export default function ArduinoPage() {
   const [yAxisRange2, setYAxisRange2] = useState({ min: 0, max: 100 });
   const [autoZoom1, setAutoZoom1] = useState(true);
   const [autoZoom2, setAutoZoom2] = useState(true);
+  const [isLogging, setIsLogging] = useState(false);
+  const [loggedPointsCount, setLoggedPointsCount] = useState(0);
 
   // Use refs for performance-critical data to avoid re-renders
   const plotDataRef = useRef([]);
@@ -25,8 +27,11 @@ export default function ArduinoPage() {
   const dataCountRef = useRef(0);
   const lastScaleUpdateRef = useRef(Date.now());
   const readLoopRef = useRef(null);
+  const jsonDataRef = useRef([]);
+  const sessionStartTimeRef = useRef(null);
 
   const [maxPoints, setMaxPoints] = useState(3000);
+
   // Calculate dynamic Y-axis range with improved amplitude management
   const calculateYAxisRange = useCallback((data, valueKey) => {
     if (data.length === 0) return { min: 0, max: 100 };
@@ -36,18 +41,13 @@ export default function ArduinoPage() {
 
     if (data.length <= 20) {
       windowSize = data.length; // Use all points for small datasets
-      console.log("1");
     } else if (data.length <= 50) {
       windowSize = Math.max(20, Math.floor(data.length * 0.8)); // 80% of points
-      console.log("2");
     } else if (data.length <= 100) {
       windowSize = 100; // Fixed window for medium datasets
-      console.log("3");
     } else {
       windowSize = 1000; // Larger window for big datasets
-      console.log("4");
     }
-    console.log("windowsize",windowSize);
 
     const recentData = data.slice(-windowSize);
     const values = recentData.map(d => d[valueKey]).filter(v => v !== undefined && !isNaN(v));
@@ -93,6 +93,116 @@ export default function ArduinoPage() {
     };
   }, []);
 
+  // Function to add data point to JSON log
+  const addToJsonLog = useCallback((dataPoint) => {
+    if (isLogging) {
+      // Initialize arrays if they don't exist
+      if (!jsonDataRef.current.point1) {
+        jsonDataRef.current = {
+          point1: [],
+          point2: [],
+          timestamp: []
+        };
+      }
+      
+      // Add data to arrays
+      jsonDataRef.current.point1.push(dataPoint.value1);
+      jsonDataRef.current.point2.push(dataPoint.value2);
+      jsonDataRef.current.timestamp.push(dataPoint.timestamp);
+      
+      setLoggedPointsCount(jsonDataRef.current.point1.length);
+      
+      console.log('JSON Entry Added - Point1:', dataPoint.value1, 'Point2:', dataPoint.value2, 'Timestamp:', dataPoint.timestamp);
+    }
+  }, [isLogging]);
+
+  // Function to save JSON file directly to local directory
+  const saveJsonFile = useCallback(async () => {
+    if (!jsonDataRef.current.point1 || jsonDataRef.current.point1.length === 0) {
+      alert('No data to export!');
+      return;
+    }
+
+    try {
+      // Check if File System Access API is supported
+      if ('showSaveFilePicker' in window) {
+        const fileHandle = await window.showSaveFilePicker({
+          suggestedName: `arduino_data_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`,
+          types: [
+            {
+              description: 'JSON files',
+              accept: {
+                'application/json': ['.json'],
+              },
+            },
+          ],
+        });
+
+        const jsonData = {
+          metadata: {
+            sessionStartTime: sessionStartTimeRef.current ? new Date(sessionStartTimeRef.current).toISOString() : null,
+            sessionEndTime: new Date().toISOString(),
+            totalPoints: jsonDataRef.current.point1.length,
+            exportTime: new Date().toISOString()
+          },
+          dataPoints: {
+            point1: jsonDataRef.current.point1,
+            point2: jsonDataRef.current.point2,
+            timestamp: jsonDataRef.current.timestamp
+          }
+        };
+
+        const dataStr = JSON.stringify(jsonData, null, 2);
+        const writable = await fileHandle.createWritable();
+        await writable.write(dataStr);
+        await writable.close();
+
+        console.log('JSON file saved directly to local directory with', jsonDataRef.current.point1.length, 'data points');
+        alert(`JSON file saved successfully with ${jsonDataRef.current.point1.length} data points!`);
+      } else {
+        // Fallback to download if File System Access API is not supported
+        downloadJsonFileFallback();
+      }
+    } catch (error) {
+      if (error.name !== 'AbortError') {
+        console.error('Error saving file:', error);
+        alert('Error saving file. Falling back to download.');
+        downloadJsonFileFallback();
+      }
+    }
+  }, []);
+
+  // Fallback download function
+  const downloadJsonFileFallback = useCallback(() => {
+    const jsonData = {
+      metadata: {
+        sessionStartTime: sessionStartTimeRef.current ? new Date(sessionStartTimeRef.current).toISOString() : null,
+        sessionEndTime: new Date().toISOString(),
+        totalPoints: jsonDataRef.current.point1.length,
+        exportTime: new Date().toISOString()
+      },
+      dataPoints: {
+        point1: jsonDataRef.current.point1,
+        point2: jsonDataRef.current.point2,
+        timestamp: jsonDataRef.current.timestamp
+      }
+    };
+
+    const dataStr = JSON.stringify(jsonData, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `arduino_data_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    console.log('JSON file downloaded with', jsonDataRef.current.point1.length, 'data points');
+  }, []);
+
   // Optimized data parsing with minimal string operations
   const parseIncomingData = useCallback((chunk) => {
     dataBufferRef.current += chunk;
@@ -121,11 +231,16 @@ export default function ArduinoPage() {
           const value1 = parseInt(match[1], 10);
           const value2 = parseInt(match[2], 10);
           
-          newDataPoints.push({
+          const dataPoint = {
             timestamp,
             value1,
             value2,
-          });
+          };
+          
+          newDataPoints.push(dataPoint);
+          
+          // Add to JSON log
+          addToJsonLog(dataPoint);
           
           dataCountRef.current++;
         }
@@ -134,7 +249,6 @@ export default function ArduinoPage() {
 
     // Batch update plot data for better performance - adaptive data retention
     if (newDataPoints.length > 0) {
-      // const maxPoints = plotDataRef.current.length > 100 ? 2000 : 1000;// Adaptive max points
       setMaxPoints(2500);
       plotDataRef.current = [...plotDataRef.current, ...newDataPoints].slice(-maxPoints);
       setPlotData([...plotDataRef.current]); // Trigger re-render with new array reference
@@ -181,7 +295,7 @@ export default function ArduinoPage() {
       dataCountRef.current = 0;
       lastRateUpdateRef.current = currentTime;
     }
-  }, [lastUpdateTime, autoZoom1, autoZoom2, calculateYAxisRange]);
+  }, [lastUpdateTime, autoZoom1, autoZoom2, calculateYAxisRange, addToJsonLog]);
 
   // Optimized port reading with proper error handling
   const listenToPort = useCallback(async (reader) => {
@@ -266,6 +380,15 @@ export default function ArduinoPage() {
   const requestData = async () => {
     if (writer) {
       try {
+        // Start JSON logging when data is requested
+        if (!isLogging) {
+          setIsLogging(true);
+          sessionStartTimeRef.current = Date.now();
+          jsonDataRef.current = { point1: [], point2: [], timestamp: [] }; // Reset JSON data
+          setLoggedPointsCount(0);
+          console.log('JSON logging started at:', new Date().toISOString());
+        }
+        
         await writer.write('$');
       } catch (error) {
         console.error('Error sending data request:', error);
@@ -275,6 +398,19 @@ export default function ArduinoPage() {
 
   const stopCommunication = async () => {
     console.log('Starting disconnect process...');
+    
+    // Stop JSON logging
+    if (isLogging) {
+      setIsLogging(false);
+      console.log('JSON logging stopped. Total points logged:', jsonDataRef.current.point1?.length || 0);
+      
+      // Auto-save JSON file if there's data
+      if (jsonDataRef.current.point1 && jsonDataRef.current.point1.length > 0) {
+        setTimeout(() => {
+          saveJsonFile();
+        }, 1000); // Small delay to ensure state updates
+      }
+    }
     
     // Step 1: Stop the reading loop first
     setIsReading(false);
@@ -348,6 +484,12 @@ export default function ArduinoPage() {
     // Reset zoom ranges
     setYAxisRange1({ min: 0, max: 100 });
     setYAxisRange2({ min: 0, max: 100 });
+    
+    // Clear JSON data
+    jsonDataRef.current = { point1: [], point2: [], timestamp: [] };
+    setLoggedPointsCount(0);
+    setIsLogging(false);
+    sessionStartTimeRef.current = null;
   };
 
   const resetZoom1 = () => {
@@ -372,7 +514,7 @@ export default function ArduinoPage() {
     <div className="p-6 bg-gray-50 min-h-screen">
       <div className="max-w-7xl mx-auto">
         <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-          <h1 className="text-2xl font-bold mb-4 text-gray-800"></h1>
+          <h1 className="text-2xl font-bold mb-4 text-gray-800">Arduino Data Logger with JSON Export</h1>
           
           <div className="flex items-center gap-4 mb-4">
             {!port ? (
@@ -383,7 +525,7 @@ export default function ArduinoPage() {
                 Connect to Arduino
               </button>
             ) : (
-              <div className="flex gap-4">
+              <div className="flex gap-4 flex-wrap">
                 <button 
                   onClick={requestData} 
                   className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors"
@@ -402,18 +544,30 @@ export default function ArduinoPage() {
                 >
                   Clear Data
                 </button>
+                <button 
+                  onClick={saveJsonFile} 
+                  className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition-colors"
+                  disabled={!jsonDataRef.current.point1 || jsonDataRef.current.point1.length === 0}
+                >
+                  Save JSON File
+                </button>
               </div>
             )}
           </div>
 
-          <div className="flex gap-6 text-sm text-gray-600 mt-4">
+          <div className="flex gap-6 text-sm text-gray-600 mt-4 flex-wrap">
             <div className="flex items-center gap-2">
               <div className={`w-3 h-3 rounded-full ${isReading ? 'bg-green-500' : 'bg-red-500'}`}></div>
               <span>Status: {isReading ? 'Connected' : 'Disconnected'}</span>
             </div>
+            <div className="flex items-center gap-2">
+              <div className={`w-3 h-3 rounded-full ${isLogging ? 'bg-blue-500 animate-pulse' : 'bg-gray-400'}`}></div>
+              <span>JSON Logging: {isLogging ? 'Active' : 'Inactive'}</span>
+            </div>
             <div>Data Rate: {dataRate} msg/sec</div>
             <div>Plot Points: {plotData.length}</div>
-            <div>Max Points: {plotData.length > 100 ? '250' : '150'}</div>
+            <div>JSON Points: {loggedPointsCount}</div>
+            <div>Max Points: {plotData.length > 100 ? '2500' : '1500'}</div>
           </div>
         </div>
 
@@ -564,7 +718,7 @@ export default function ArduinoPage() {
           </div>
 
           <div className="bg-white rounded-lg shadow-lg p-6">
-            <h2 className="text-lg font-semibold mb-4 text-gray-800">Real-Time Statistics</h2>
+            <h2 className="text-lg font-semibold mb-4 text-gray-800">Real-Time Statistics & JSON Log Status</h2>
             <div className="space-y-3">
               {plotData.length > 0 && (
                 <>
@@ -602,6 +756,26 @@ export default function ArduinoPage() {
                   </div>
                 </>
               )}
+              <div className="border-t pt-3 mt-3">
+                <div className="flex justify-between text-sm">
+                  <span>JSON Logging:</span>
+                  <span className={isLogging ? 'text-blue-600 font-bold' : 'text-gray-500'}>
+                    {isLogging ? 'ACTIVE' : 'Inactive'}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>JSON Points Logged:</span>
+                  <span className="font-mono font-bold text-purple-600">{loggedPointsCount}</span>
+                </div>
+                {sessionStartTimeRef.current && (
+                  <div className="flex justify-between text-sm">
+                    <span>Session Duration:</span>
+                    <span className="font-mono">
+                      {Math.floor((Date.now() - sessionStartTimeRef.current) / 1000)}s
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

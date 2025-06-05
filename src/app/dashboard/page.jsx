@@ -1,14 +1,14 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation"; // For Next.js App Router
+// import { useRouter } from "next/navigation"; // For Next.js App Router
 // Or use: import { useNavigate } from "react-router-dom"; // For React Router
 import { User, UserPlus, Activity } from "lucide-react";
 import { db2 } from "../lib/firebase2";
 import { collection, addDoc, Timestamp } from "firebase/firestore";
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-const router = useRouter();
+
 
 export default function HealthDashboard() {
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -16,7 +16,7 @@ export default function HealthDashboard() {
   const [formStep, setFormStep] = useState(1);
   const router = useRouter(); // For Next.js
   // const navigate = useNavigate(); // For React Router
-
+  // const router = useRouter();
   const [formData, setFormData] = useState({
     name: "",
     gender: "",
