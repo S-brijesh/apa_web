@@ -1,10 +1,11 @@
-'use client'; // ✅ Only needed if you're using App Router
+'use client'; // Only needed if you're using App Router
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { useRouter } from 'next/navigation'; // ✅ If you're using App Router. Use 'next/router' if you're on Pages Router.
+import { useRouter } from 'next/navigation'; //  If you're using App Router. Use 'next/router' if you're on Pages Router.
 import { auth } from '../lib/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
+import Image from 'next/image';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -21,7 +22,7 @@ export default function LoginPage() {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       console.log('Logged in user:', userCredential.user);
-      router.push('/dashboard'); // ✅ Redirect on success
+      router.push('/dashboard'); //  Redirect on success
     } catch (error) {
       console.error('Login failed:', error.code);
       switch (error.code) {
@@ -99,10 +100,15 @@ export default function LoginPage() {
 
       {/* Right Image Section */}
       <div className="w-1/2 bg-indigo-100 flex items-center justify-center">
-        <div
-          className="w-3/4 h-3/4 bg-no-repeat bg-center bg-contain"
-          // style={{ backgroundImage: "url('/wave-pattern.png')" }} // Add image URL here
-        ></div>
+        <div className="w-3/4 h-3/4 relative">
+          <Image
+            src="/images/landingPage.png" // ✅ Ensure this image is in the public/ folder
+            alt="Landing Page Illustration"
+            layout="fill"
+            objectFit="contain"
+            priority
+          />
+        </div>
       </div>
     </div>
   );

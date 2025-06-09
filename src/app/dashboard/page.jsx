@@ -1,21 +1,24 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation"; // For Next.js App Router
-// Or use: import { useNavigate } from "react-router-dom"; // For React Router
-import { User, UserPlus, Activity } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { User, UserPlus, Activity, ArrowLeft, Heart } from "lucide-react";
 import { db2 } from "../lib/firebase2";
+import Image from 'next/image';
 import { collection, addDoc, Timestamp } from "firebase/firestore";
-// import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-// const router = useRouter();
-import { ArrowLeft } from "lucide-react";
+import useAuthProtection from '../../hooks/useAuthProtection';
+
 export default function HealthDashboard() {
+  const checkingAuth = useAuthProtection();
+
+  if (checkingAuth) {
+    return <div className="p-6 text-center text-white-500">Checking authentication...</div>; 
+  }
   const [activeTab, setActiveTab] = useState("dashboard");
   const [selectedButton, setSelectedButton] = useState(null);
   const [formStep, setFormStep] = useState(1);
-  const router = useRouter(); // For Next.js
-  // const navigate = useNavigate(); // For React Router
+  const router = useRouter();
 
   const [formData, setFormData] = useState({
     name: "",
@@ -46,10 +49,8 @@ export default function HealthDashboard() {
   }, []);
 
   const handleButtonClick = (tabName, buttonId) => {
-    // Handle navigation for patients button
     if (tabName === "patients") {
-      router.push("/patient"); // For Next.js
-      // navigate("/patients"); // For React Router
+      router.push("/patient");
       return;
     }
 
@@ -58,9 +59,6 @@ export default function HealthDashboard() {
     if (tabName === "add-patient") {
       setFormStep(1);
     }
-    
-      
-
   };
 
   const handlePatientChange = (e) => {
@@ -107,8 +105,6 @@ export default function HealthDashboard() {
   const handleBack = () => {
     setFormStep(1);
   };
-
-
 
   const handleAdd = async () => {
     const errors = validateMedicalInfo();
@@ -157,183 +153,260 @@ export default function HealthDashboard() {
   };
 
   return (
-    <div className="flex h-screen bg-gray-50">
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <main className="flex-1 overflow-y-auto p-6 mt-10">
-          <div className="mx-auto max-w-6xl">
-            <div className="flex flex-col lg:flex-row">
-              <div className="lg:w-1/2 p-6 flex justify-center items-center relative">
-                {activeTab === "add-patient" && formStep === 1 && (
-                  <AddPatient
-                    formData={formData}
-                    handleChange={handlePatientChange}
-                    handleNext={handleNext}
-                    errors={formErrors}
-                  />
-                )}
-                {activeTab === "add-patient" && formStep === 2 && (
-                  <AddPatientMedical
-                    medicalData={medicalData}
-                    handleChange={handleMedicalChange}
-                    handleAdd={handleAdd}
-                    handleBack={handleBack}
-                    errors={medicalErrors}
-                  />
-                )}
-              </div>
-
-              <div className="lg:w-1/2 p-6 space-y-4">
-                <ActionButton
-                  id="tests-button"
-                  icon={<Activity className="h-10 w-10 text-white" />}
-                  text="Record a new test"
-                  isSelected={selectedButton === "tests-button"}
-                  otherSelected={selectedButton !== null && selectedButton !== "tests-button"}
-                  onClick={() => handleButtonClick("tests", "tests-button")}
-                />
-                <ActionButton
-                  id="add-patient-button"
-                  icon={<UserPlus className="h-10 w-10 text-white" />}
-                  text="Add patient"
-                  isSelected={selectedButton === "add-patient-button"}
-                  otherSelected={selectedButton !== null && selectedButton !== "add-patient-button"}
-                  onClick={() => handleButtonClick("add-patient", "add-patient-button")}
-                />
-                <ActionButton
-                  id="patients-button"
-                  icon={<User className="h-10 w-10 text-white" />}
-                  text="Patients"
-                  isSelected={selectedButton === "patients-button"}
-                  otherSelected={selectedButton !== null && selectedButton !== "patients-button"}
-                  onClick={() => handleButtonClick("patients", "patients-button")}
-                />
-              </div>
-            </div>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+      {/* Header */}
+      {/* <div className="bg-white shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center">
+            <Heart className="h-8 w-8 text-indigo-600 mr-3" />
+            <h1 className="text-2xl font-bold text-gray-900">HealthCare Dashboard</h1>
           </div>
-        </main>
+        </div>
+      </div> */}
+
+      {/* Main Content */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 min-h-[calc(100vh-12rem)]">
+          
+          {/* Left Side - Forms */}
+          <div className="flex items-center justify-center">
+            {activeTab === "dashboard" && (
+              <div className="w-3/4 h-3/4 relative">
+                <Image
+                    src="/images/landingpageimg.png" // ✅ Ensure this image is in the public/ folder
+                    alt="Landing Page Illustration"
+                    layout="fill"
+                    objectFit="contain"
+                    priority
+                />
+              </div>
+            )}
+
+            {activeTab === "add-patient" && formStep === 1 && (
+              <AddPatient
+                formData={formData}
+                handleChange={handlePatientChange}
+                handleNext={handleNext}
+                errors={formErrors}
+              />
+            )}
+
+            {activeTab === "add-patient" && formStep === 2 && (
+              <AddPatientMedical
+                medicalData={medicalData}
+                handleChange={handleMedicalChange}
+                handleAdd={handleAdd}
+                handleBack={handleBack}
+                errors={medicalErrors}
+              />
+            )}
+
+            {activeTab === "tests" && (
+              <div className="text-center p-8">
+                <div className="bg-white rounded-2xl shadow-lg p-8 max-w-md mx-auto">
+                  <Activity className="h-16 w-16 text-green-600 mx-auto mb-4" />
+                  <h2 className="text-2xl font-bold text-gray-900 mb-4">Record New Test</h2>
+                  {/* <p className="text-gray-600">Test recording functionality will be implemented here.</p> */}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Right Side - Action Buttons */}
+          <div className="flex flex-col justify-center space-y-6 p-4">
+            <ActionButton
+              id="tests-button"
+              icon={<Activity className="h-12 w-12" />}
+              text="Record a new test"
+              // description="Add medical test results and reports"
+              isSelected={selectedButton === "tests-button"}
+              otherSelected={selectedButton !== null && selectedButton !== "tests-button"}
+              onClick={() => handleButtonClick("tests", "tests-button")}
+            />
+            
+            <ActionButton
+              id="add-patient-button"
+              icon={<UserPlus className="h-12 w-12" />}
+              text="Add patient"
+              // description="Register a new patient with medical details"
+              isSelected={selectedButton === "add-patient-button"}
+              otherSelected={selectedButton !== null && selectedButton !== "add-patient-button"}
+              onClick={() => handleButtonClick("add-patient", "add-patient-button")}
+            />
+            
+            <ActionButton
+              id="patients-button"
+              icon={<User className="h-12 w-12" />}
+              text="View patients"
+              // description="Browse and manage existing patients"
+              isSelected={selectedButton === "patients-button"}
+              otherSelected={selectedButton !== null && selectedButton !== "patients-button"}
+              onClick={() => handleButtonClick("patients", "patients-button")}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-function ActionButton({ id, icon, text, onClick, isSelected, otherSelected }) {
-  let bgColor = "bg-indigo-900";
-  let hoverColor = "hover:bg-indigo-800";
+function ActionButton({ id, icon, text, description, onClick, isSelected, otherSelected }) {
+  const baseClasses = "group relative p-6 rounded-2xl transition-all duration-300 transform hover:scale-105 shadow-lg";
+  
+  let buttonClasses = baseClasses;
+  let iconColor = "text-white";
   let textColor = "text-white";
+  let descColor = "text-white/80";
 
   if (isSelected) {
-    bgColor = "bg-indigo-900";
-    hoverColor = "hover:bg-indigo-800";
+    buttonClasses += " bg-gradient-to-r from-indigo-600 to-purple-600 shadow-2xl";
   } else if (otherSelected) {
-    bgColor = "bg-blue-100";
-    hoverColor = "hover:bg-blue-200";
-    textColor = "text-gray-800";
+    buttonClasses += " bg-white hover:bg-gray-50 border border-gray-200";
+    iconColor = "text-indigo-600";
+    textColor = "text-gray-900";
+    descColor = "text-gray-600";
+  } else {
+    buttonClasses += " bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800";
   }
 
   return (
     <button
       id={id}
       onClick={onClick}
-      className={`flex items-center w-full p-6 ${bgColor} ${textColor} rounded-lg ${hoverColor} transition-colors`}
-      style={otherSelected && !isSelected ? { backgroundColor: "#cdddff" } : {}}
+      className={buttonClasses}
     >
-      <div className="mr-6">{icon}</div>
-      <span className="text-lg font-medium">{text}</span>
+      <div className="flex items-start space-x-4">
+        <div className={`p-3 rounded-xl ${isSelected ? 'bg-white/20' : otherSelected ? 'bg-indigo-50' : 'bg-white/20'}`}>
+          <div className={iconColor}>{icon}</div>
+        </div>
+        <div className="flex-1 text-left">
+          <h3 className={`text-xl font-semibold mb-1 ${textColor}`}>{text}</h3>
+          <p className={`text-sm ${descColor}`}>{description}</p>
+        </div>
+      </div>
     </button>
   );
 }
 
 function AddPatient({ formData, handleChange, handleNext, errors }) {
   return (
-    <div className="flex justify-center items-center min-h-screen bg-[#d3d3f3]">
-      <div className="bg-white bg-opacity-30 backdrop-blur-md p-8 rounded-3xl w-[90%] max-w-md shadow-xl">
-        <h2 className="text-black text-center text-2xl font-semibold mb-6">ADD PATIENT</h2>
-        <form className="space-y-4">
-          <input
-            type="text"
-            name="name"
-            placeholder="Name"
-            value={formData.name}
-            onChange={handleChange}
-            className="w-full border-b bg-transparent outline-none text-black placeholder-black"
-          />
-          {errors.name && <p className="text-red-600 text-sm">{errors.name}</p>}
+    <div className="w-full max-w-md mx-auto">
+      <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl p-8 border border-white/20">
+        <div className="text-center mb-8">
+          <UserPlus className="h-12 w-12 text-indigo-600 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-gray-900">Add New Patient</h2>
+          <p className="text-gray-600 mt-2">Enter patient information</p>
+        </div>
 
-          <div className="flex justify-between gap-4">
-            <select
-              name="gender"
-              value={formData.gender}
-              onChange={handleChange}
-              className="w-1/2 border-b bg-transparent text-black outline-none"
-            >
-              <option value="">Gender</option>
-              <option value="Male">Male</option>
-              <option value="Female">Female</option>
-              <option value="Other">Other</option>
-            </select>
-            <input
-              type="date"
-              name="dob"
-              value={formData.dob}
-              onChange={handleChange}
-              className="w-1/2 border-b bg-transparent text-black outline-none"
-            />
-          </div>
-          {errors.gender && <p className="text-red-600 text-sm">{errors.gender}</p>}
-          {errors.dob && <p className="text-red-600 text-sm">{errors.dob}</p>}
-
-          <input
-            type="email"
-            name="email"
-            placeholder="Email id"
-            value={formData.email}
-            onChange={handleChange}
-            className="w-full border-b bg-transparent outline-none text-black placeholder-black"
-          />
-          {errors.email && <p className="text-red-600 text-sm">{errors.email}</p>}
-
-          <input
-            type="tel"
-            name="phone"
-            placeholder="Phone number"
-            value={formData.phone}
-            onChange={handleChange}
-            className="w-full border-b bg-transparent outline-none text-black placeholder-black"
-          />
-          {errors.phone && <p className="text-red-600 text-sm">{errors.phone}</p>}
-
-          <div className="flex justify-between gap-4">
-            <select
-              name="state"
-              value={formData.state}
-              onChange={handleChange}
-              className="w-1/2 border-b bg-transparent text-black outline-none"
-            >
-              <option value="">State</option>
-              <option value="State1">State1</option>
-              <option value="State2">State2</option>
-            </select>
-
+        <div className="space-y-6 text-black">
+          <div>
             <input
               type="text"
-              name="city"
-              placeholder="City"
-              value={formData.city}
+              name="name"
+              placeholder="Full Name"
+              value={formData.name}
               onChange={handleChange}
-              className="w-1/2 border-b bg-transparent outline-none text-black placeholder-black"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-colors"
             />
+            {errors.name && <p className="text-red-500 text-sm mt-1">{errors.name}</p>}
           </div>
-          {errors.state && <p className="text-red-600 text-sm">{errors.state}</p>}
-          {errors.city && <p className="text-red-600 text-sm">{errors.city}</p>}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <select
+                name="gender"
+                value={formData.gender}
+                onChange={handleChange}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-colors"
+              >
+                <option value="">Select Gender</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Other">Other</option>
+              </select>
+              {errors.gender && <p className="text-red-500 text-sm mt-1">{errors.gender}</p>}
+            </div>
+            
+            <div>
+              <input
+                type="date"
+                name="dob"
+                value={formData.dob}
+                onChange={handleChange}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-colors"
+              />
+              {errors.dob && <p className="text-red-500 text-sm mt-1">{errors.dob}</p>}
+            </div>
+          </div>
+
+          <div>
+            <input
+              type="email"
+              name="email"
+              placeholder="Email Address"
+              value={formData.email}
+              onChange={handleChange}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-colors"
+            />
+            {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email}</p>}
+          </div>
+
+          <div>
+            <input
+              type="tel"
+              name="phone"
+              placeholder="Phone Number"
+              value={formData.phone}
+              onChange={handleChange}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-colors"
+            />
+            {errors.phone && <p className="text-red-500 text-sm mt-1">{errors.phone}</p>}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <select
+                name="state"
+                value={formData.state}
+                onChange={handleChange}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-colors"
+              >
+                <option value="">Select State</option>
+                <option value="Maharashtra">Maharashtra</option>
+                <option value="Karnataka">Karnataka</option>
+                <option value="Gujarat">Gujarat</option>
+                <option value="Tamil Nadu">Tamil Nadu</option>
+                <option value="Delhi">Delhi</option>
+                <option value="Uttar Pradesh">Uttar Pradesh</option>
+                <option value="West Bengal">West Bengal</option>
+                <option value="Rajasthan">Rajasthan</option>
+                <option value="Madhya Pradesh">Madhya Pradesh</option>
+                <option value="Punjab">Punjab</option>
+              </select>
+              {errors.state && <p className="text-red-500 text-sm mt-1">{errors.state}</p>}
+            </div>
+            
+            <div>
+              <input
+                type="text"
+                name="city"
+                placeholder="City"
+                value={formData.city}
+                onChange={handleChange}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-colors"
+              />
+              {errors.city && <p className="text-red-500 text-sm mt-1">{errors.city}</p>}
+            </div>
+          </div>
 
           <button
             type="button"
             onClick={handleNext}
-            className="w-full mt-6 bg-white text-[#4B4BFF] font-semibold py-2 rounded-xl shadow-md"
+            className="w-full bg-gradient-to-r from-indigo-600 to-indigo-700 text-white font-semibold py-3 px-6 rounded-lg hover:from-indigo-700 hover:to-indigo-800 transition-all duration-200 transform hover:scale-105 shadow-lg"
           >
             Next
           </button>
-        </form>
+        </div>
       </div>
     </div>
   );
@@ -341,117 +414,131 @@ function AddPatient({ formData, handleChange, handleNext, errors }) {
 
 function AddPatientMedical({ medicalData, handleChange, handleAdd, handleBack, errors }) {
   return (
-    <div className="flex justify-center items-center min-h-screen bg-[#d3d3f3]">
-      <div className="relative bg-white bg-opacity-30 backdrop-blur-md p-8 rounded-3xl w-[90%] max-w-md shadow-xl">
-        
-        {/* Back Arrow */}
-        <div
-          className="absolute top-4 left-4 cursor-pointer text-[#4B4BFF]"
-          onClick={handleBack}
-        >
-          <ArrowLeft className="w-6 h-6" />
+    <div className="w-full max-w-md mx-auto">
+      <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl p-8 border border-white/20">
+        <div className="flex items-center mb-8">
+          <button
+            onClick={handleBack}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors mr-4"
+          >
+            <ArrowLeft className="w-6 h-6 text-gray-600" />
+          </button>
+          <div className="flex-1 text-center">
+            <Activity className="h-12 w-12 text-indigo-600 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-gray-900">Medical Information</h2>
+            <p className="text-gray-600 mt-2">Complete patient medical details</p>
+          </div>
         </div>
 
-        <h2 className="text-white text-center text-2xl font-semibold mb-6">ADD PATIENT</h2>
-        <form className="space-y-4">
-          <div className="flex justify-between gap-4">
-            <input
-              type="number"
-              name="height"
-              placeholder="Height (cm)"
-              value={medicalData.height}
-              onChange={handleChange}
-              className="w-1/2 border-b bg-transparent text-black outline-none placeholder-black"
-            />
-            <input
-              type="number"
-              name="weight"
-              placeholder="Weight (kg)"
-              value={medicalData.weight}
-              onChange={handleChange}
-              className="w-1/2 border-b bg-transparent text-black outline-none placeholder-black"
-            />
+        <form className="space-y-6 text-black">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <input
+                type="number"
+                name="height"
+                placeholder="Height (cm)"
+                value={medicalData.height}
+                onChange={handleChange}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-colors"
+              />
+              {errors.height && <p className="text-red-500 text-sm mt-1">{errors.height}</p>}
+            </div>
+            
+            <div>
+              <input
+                type="number"
+                name="weight"
+                placeholder="Weight (kg)"
+                value={medicalData.weight}
+                onChange={handleChange}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-colors"
+              />
+              {errors.weight && <p className="text-red-500 text-sm mt-1">{errors.weight}</p>}
+            </div>
           </div>
-          {errors.height && <p className="text-red-600 text-sm">{errors.height}</p>}
-          {errors.weight && <p className="text-red-600 text-sm">{errors.weight}</p>}
 
-          <div className="flex justify-between gap-4">
-            <select
-              name="smoke"
-              value={medicalData.smoke}
-              onChange={handleChange}
-              className="w-1/2 border-b bg-transparent text-black outline-none"
-            >
-              <option value="">Do you smoke?</option>
-              <option value="Yes">Yes</option>
-              <option value="No">No</option>
-            </select>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <select
+                name="smoke"
+                value={medicalData.smoke}
+                onChange={handleChange}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-colors"
+              >
+                <option value="">Do you smoke?</option>
+                <option value="Yes">Yes</option>
+                <option value="No">No</option>
+              </select>
+              {errors.smoke && <p className="text-red-500 text-sm mt-1">{errors.smoke}</p>}
+            </div>
 
-            <select
-              name="drink"
-              value={medicalData.drink}
-              onChange={handleChange}
-              className="w-1/2 border-b bg-transparent text-black outline-none"
-            >
-              <option value="">Do you drink?</option>
-              <option value="Yes">Yes</option>
-              <option value="No">No</option>
-            </select>
+            <div>
+              <select
+                name="drink"
+                value={medicalData.drink}
+                onChange={handleChange}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-colors"
+              >
+                <option value="">Do you drink?</option>
+                <option value="Yes">Yes</option>
+                <option value="No">No</option>
+              </select>
+              {errors.drink && <p className="text-red-500 text-sm mt-1">{errors.drink}</p>}
+            </div>
           </div>
-          {errors.smoke && <p className="text-red-600 text-sm">{errors.smoke}</p>}
-          {errors.drink && <p className="text-red-600 text-sm">{errors.drink}</p>}
 
-          <input
-            type="text"
-            name="diabetes"
-            placeholder="Diabetes"
-            value={medicalData.diabetes}
-            onChange={handleChange}
-            className="w-full border-b bg-transparent outline-none text-black placeholder-black"
-          />
-
-          <input
-            type="text"
-            name="diagnosis"
-            placeholder="Any previous diagnosis?"
-            value={medicalData.diagnosis}
-            onChange={handleChange}
-            className="w-full border-b bg-transparent outline-none text-black placeholder-black"
-          />
-
-          <div className="flex justify-between gap-4">
+          <div>
             <input
               type="text"
-              name="symptoms"
-              placeholder="Symptoms"
-              value={medicalData.symptoms}
+              name="diabetes"
+              placeholder="Diabetes (Type/None)"
+              value={medicalData.diabetes}
               onChange={handleChange}
-              className="w-1/2 border-b bg-transparent text-black outline-none placeholder-black"
-            />
-            <input
-              type="text"
-              name="medications"
-              placeholder="Medications"
-              value={medicalData.medications}
-              onChange={handleChange}
-              className="w-1/2 border-b bg-transparent text-black outline-none placeholder-black"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-colors"
             />
           </div>
 
-          {/* <button
-            type="button"
-            onClick={handleBack}
-            className="w-full mt-2 bg-white text-[#4B4BFF] font-semibold py-2 rounded-xl shadow-md"
-          >
-            Back
-          </button> */}
+          <div>
+            <textarea
+              name="diagnosis"
+              placeholder="Previous diagnosis (if any)"
+              value={medicalData.diagnosis}
+              onChange={handleChange}
+              rows="3"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-colors resize-none"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <textarea
+                name="symptoms"
+                placeholder="Current symptoms"
+                value={medicalData.symptoms}
+                onChange={handleChange}
+                rows="3"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-colors resize-none"
+              />
+            </div>
+            
+            <div>
+              <textarea
+                name="medications"
+                placeholder="Current medications"
+                value={medicalData.medications}
+                onChange={handleChange}
+                rows="3"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-colors resize-none"
+              />
+            </div>
+          </div>
 
           <button
             type="button"
             onClick={handleAdd}
-            className="w-full mt-6 bg-white text-[#4B4BFF] font-semibold py-2 rounded-xl shadow-md"
+            className="w-full bg-gradient-to-r from-green-600 to-green-700 text-white font-semibold py-3 px-6 rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 transform hover:scale-105 shadow-lg"
           >
-            Add
+            Add Patient
           </button>
         </form>
       </div>
