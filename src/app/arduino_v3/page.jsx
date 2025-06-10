@@ -449,12 +449,13 @@ export default function ArduinoPage() {
             <LineChart width={1200} height={400} data={plotData}>
               <CartesianGrid strokeDasharray="2 2" stroke="#f0f0f0" />
               <XAxis 
-                dataKey="timestamp" 
+                dataKey="timeSec" // <-- change from "timestamp" to "timeSec"
                 stroke="#666"
                 tick={{ fontSize: 11 }}
                 domain={['dataMin', 'dataMax']}
                 type="number"
                 scale="linear"
+                label={{ value: 'Time (s)', position: 'insideBottomRight', offset: -5 }}
               />
               <YAxis 
                 stroke="#666"
@@ -522,12 +523,13 @@ export default function ArduinoPage() {
             <LineChart width={1200} height={400} data={plotData}>
               <CartesianGrid strokeDasharray="2 2" stroke="#f0f0f0" />
               <XAxis 
-                dataKey="timestamp" 
+                dataKey="timeSec" // <-- change from "timestamp" to "timeSec"
                 stroke="#666"
                 tick={{ fontSize: 11 }}
                 domain={['dataMin', 'dataMax']}
                 type="number"
                 scale="linear"
+                label={{ value: 'Time (s)', position: 'insideBottomRight', offset: -5 }}
               />
               <YAxis 
                 stroke="#666"

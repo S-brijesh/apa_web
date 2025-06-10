@@ -3,6 +3,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
 } from 'recharts';
+import Navbar from '../../components/Navbar';
 
 export default function ArduinoPage() {
   const [port, setPort] = useState(null);
@@ -371,10 +372,12 @@ export default function ArduinoPage() {
   };
 
   return (
+    <>
+    <Navbar />
     <div className="p-6 bg-gray-50 min-h-screen">
       <div className="max-w-7xl mx-auto">
         <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-          <h1 className="text-2xl font-bold mb-4 text-gray-800"></h1>
+          <h1 className="text-2xl font-bold mb-4 text-gray-800">Record </h1>
           
           <div className="flex items-center gap-4 mb-4">
             {!port ? (
@@ -605,5 +608,6 @@ export default function ArduinoPage() {
         </div>
       </div>
     </div>
+    </>
   );
 }
