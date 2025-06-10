@@ -1,3 +1,4 @@
+"use client";
 import React from 'react';
 import { ArrowLeft, Download } from 'lucide-react';
 
@@ -56,7 +57,7 @@ export default function CardioAnalysisPage() {
   return (
     <div className="min-h-screen bg-white text-indigo-700 font-sans px-8 py-6">
       {/* Top border gradient like in image */}
-      <div className="h-1 w-full bg-gradient-to-r from-indigo-200 via-indigo-100 to-white mb-4" />
+      
 
       {/* Header */}
       <div className="flex justify-between items-center mb-6">

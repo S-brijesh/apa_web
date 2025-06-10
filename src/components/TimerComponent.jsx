@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 
-export default function TimerComponent() {
+export default function TimerComponent({ onRecordingChange }) {
   const [milliseconds, setMilliseconds] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
 
@@ -20,10 +20,12 @@ export default function TimerComponent() {
 
   const startTimer = () => {
     setIsRunning(true);
+    onRecordingChange(true);
   };
 
   const stopTimer = () => {
     setIsRunning(false);
+    onRecordingChange(false);
   };
 
   const generateReport = () => {
@@ -52,14 +54,14 @@ export default function TimerComponent() {
             onClick={startTimer}
             className=" text-indigo-700 shadow-md py-2 px-4 rounded-md hover:bg-gray-200 transition-colors"
           >
-            Start timer
+            Start Recording
           </button>
 
           <button
             onClick={stopTimer}
             className=" text-indigo-700 shadow-md py-2 px-4 rounded-md hover:bg-gray-200 transition-colors"
           >
-            Stop timer
+            Stop Recording
           </button>
 
           <button

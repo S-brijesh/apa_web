@@ -15,16 +15,16 @@ export default function Navbar() {
         <Link href="/" className="hover:underline font-semibold">
           Home
         </Link>
-        <Link href="/support" className="hover:underline">
+        <Link href="/help" className="hover:underline">
           Help & support
         </Link>
         <Link href="/login" className="hover:underline">
           Log out
         </Link>
-        <div className="flex items-center space-x-1">
+        {/* <div className="flex items-center space-x-1">
           <span>Device is connected</span>
           <span className="bg-lime-400 text-white text-xs rounded-sm px-1">✅</span>
-        </div>
+        </div> */}
       </div>
     </nav>
   );

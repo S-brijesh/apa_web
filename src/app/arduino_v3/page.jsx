@@ -12,6 +12,7 @@ export default function ArduinoPage() {
   const [plotData, setPlotData] = useState([]);
   const [isReading, setIsReading] = useState(false);
   const [dataRate, setDataRate] = useState(0);
+  const [samplingRate, setSamplingRate] = useState(0);
   const [lastUpdateTime, setLastUpdateTime] = useState(Date.now());
   const [yAxisRange1, setYAxisRange1] = useState({ min: 0, max: 100 });
   const [yAxisRange2, setYAxisRange2] = useState({ min: 0, max: 100 });
@@ -25,29 +26,22 @@ export default function ArduinoPage() {
   const dataCountRef = useRef(0);
   const lastScaleUpdateRef = useRef(Date.now());
   const readLoopRef = useRef(null);
+  const firstTimestampRef = useRef(null);
+  const lastTimestampRef = useRef(null);
 
-  const [maxPoints, setMaxPoints] = useState(3500);
-  // Calculate dynamic Y-axis range with improved amplitude management
+  // Calculate dynamic Y-axis range optimized for pulse data visualization
   const calculateYAxisRange = useCallback((data, valueKey) => {
     if (data.length === 0) return { min: 0, max: 100 };
 
-    // Adaptive window size based on total data points
+    // Use larger window for pulse data to capture full waveform characteristics
     let windowSize;
-
-    if (data.length <= 20) {
+    if (data.length <= 50) {
       windowSize = data.length; // Use all points for small datasets
-      console.log("1");
-    } else if (data.length <= 50) {
-      windowSize = Math.max(20, Math.floor(data.length * 0.8)); // 80% of points
-      console.log("2");
-    } else if (data.length <= 100) {
-      windowSize = 100; // Fixed window for medium datasets
-      console.log("3");
+    } else if (data.length <= 150) {
+      windowSize = Math.max(50, Math.floor(data.length * 0.9)); // 90% of points
     } else {
-      windowSize = 1000; // Larger window for big datasets
-      console.log("4");
+      windowSize = 150; // Large window for detailed pulse visualization
     }
-    console.log("windowsize",windowSize);
 
     const recentData = data.slice(-windowSize);
     const values = recentData.map(d => d[valueKey]).filter(v => v !== undefined && !isNaN(v));
@@ -58,32 +52,27 @@ export default function ArduinoPage() {
     const max = Math.max(...values);
     const range = max - min;
     
-    // Dynamic padding based on data characteristics
+    // Optimized padding for pulse data - smaller padding to show more detail
     let padding;
-    if (range < 5) {
-      // Very small range - use fixed padding
-      padding = 5;
-    } else if (range < 20) {
-      // Small range - use 30% padding
-      padding = range * 0.3;
-    } else if (range < 50) {
-      // Medium range - use 20% padding
-      padding = range * 0.2;
+    if (range < 2) {
+      padding = 2; // Minimum padding for very stable signals
+    } else if (range < 10) {
+      padding = range * 0.15; // Small padding for small variations
+    } else if (range < 30) {
+      padding = range * 0.1; // Minimal padding for medium variations
     } else {
-      // Large range - use 15% padding
-      padding = range * 0.15;
+      padding = range * 0.05; // Very small padding for large variations
     }
     
-    // Ensure minimum range for visibility
     const finalMin = Math.max(0, Math.floor(min - padding));
     const finalMax = Math.ceil(max + padding);
     
-    // Ensure minimum visible range
-    if (finalMax - finalMin < 10) {
+    // Ensure minimum visible range for pulse detection
+    if (finalMax - finalMin < 5) {
       const center = (finalMax + finalMin) / 2;
       return {
-        min: Math.max(0, Math.floor(center - 5)),
-        max: Math.ceil(center + 5)
+        min: Math.max(0, Math.floor(center - 2.5)),
+        max: Math.ceil(center + 2.5)
       };
     }
     
@@ -109,8 +98,8 @@ export default function ArduinoPage() {
         const clean = line.trim();
         
         // Update display data (throttled to prevent UI lag)
-        if (currentTime - lastUpdateTime > 100) { // Update display every 100ms max
-          setData(prev => (prev + '\n' + clean).slice(-2000)); // Keep last 2000 chars
+        if (currentTime - lastUpdateTime > 50) { // Faster display updates for real-time feel
+          setData(prev => (prev + '\n' + clean).slice(-3000)); // Keep more data for analysis
           setLastUpdateTime(currentTime);
         }
 
@@ -118,6 +107,11 @@ export default function ArduinoPage() {
         const match = clean.match(/\$(\d+)&(\d+)#(\d+)/);
         if (match) {
           const timestamp = parseInt(match[3], 10);
+          if (firstTimestampRef.current === null) {
+            firstTimestampRef.current = timestamp;
+          }
+          lastTimestampRef.current = timestamp;
+
           const value1 = parseInt(match[1], 10);
           const value2 = parseInt(match[2], 10);
           
@@ -132,17 +126,14 @@ export default function ArduinoPage() {
       }
     }
 
-    // Batch update plot data for better performance - adaptive data retention
+    // Batch update plot data for better performance - keep more points for detailed visualization
     if (newDataPoints.length > 0) {
-      // const maxPoints = plotDataRef.current.length > 100 ? 2000 : 1000;// Adaptive max points
-      // setMaxPoints(2500);
-
-
+      const maxPoints = 3500; // Increased to show more detailed waveform like your image
       plotDataRef.current = [...plotDataRef.current, ...newDataPoints].slice(-maxPoints);
       setPlotData([...plotDataRef.current]); // Trigger re-render with new array reference
       
-      // Update Y-axis scaling in real-time with adaptive frequency
-      const scaleUpdateInterval = plotDataRef.current.length > 50 ? 150 : 300; // Faster updates for more data
+      // Update Y-axis scaling in real-time with faster frequency for detailed view
+      const scaleUpdateInterval = 100; // Faster updates for smooth real-time visualization
       if (currentTime - lastScaleUpdateRef.current > scaleUpdateInterval) {
         if (autoZoom1) {
           const range1 = calculateYAxisRange(plotDataRef.current, 'value1');
@@ -182,8 +173,17 @@ export default function ArduinoPage() {
       setDataRate(dataCountRef.current);
       dataCountRef.current = 0;
       lastRateUpdateRef.current = currentTime;
+  
+      // Sampling rate update
+      if (firstTimestampRef.current !== null && lastTimestampRef.current !== null) {
+        const durationInSec = (lastTimestampRef.current - firstTimestampRef.current) / 1000;
+        if (durationInSec > 0) {
+          const totalPoints = plotDataRef.current.length;
+          setSamplingRate(Math.round(totalPoints / durationInSec));
+        }
+      }
     }
-  }, [lastUpdateTime, autoZoom1, autoZoom2, calculateYAxisRange]);
+  }, [lastUpdateTime, autoZoom1, autoZoom2, calculateYAxisRange]); // Added missing dependencies
 
   // Optimized port reading with proper error handling
   const listenToPort = useCallback(async (reader) => {
@@ -212,7 +212,7 @@ export default function ArduinoPage() {
       console.log('Requesting serial port...');
       const selectedPort = await navigator.serial.requestPort();
       
-      console.log('Opening port...',selectedPort);
+      console.log('Opening port...');
       // Optimized serial settings for real-time performance
       await selectedPort.open({ 
         baudRate: 115200,
@@ -224,11 +224,11 @@ export default function ArduinoPage() {
 
       console.log('Setting up streams...');
       const textDecoder = new TextDecoderStream();
-      const readableStreamClosed = selectedPort.readable.pipeTo(textDecoder.writable);
+      selectedPort.readable.pipeTo(textDecoder.writable);
       const reader = textDecoder.readable.getReader();
 
       const textEncoder = new TextEncoderStream();
-      const writableStreamClosed = textEncoder.readable.pipeTo(selectedPort.writable);
+      textEncoder.readable.pipeTo(selectedPort.writable);
       const writer = textEncoder.writable.getWriter();
 
       setPort(selectedPort);
@@ -241,6 +241,8 @@ export default function ArduinoPage() {
       dataBufferRef.current = '';
       dataCountRef.current = 0;
       lastRateUpdateRef.current = Date.now();
+      firstTimestampRef.current = null;
+      lastTimestampRef.current = null;
 
       console.log('Connection established successfully');
     } catch (error) {
@@ -347,6 +349,8 @@ export default function ArduinoPage() {
     plotDataRef.current = [];
     dataBufferRef.current = '';
     dataCountRef.current = 0;
+    firstTimestampRef.current = null;
+    lastTimestampRef.current = null;
     // Reset zoom ranges
     setYAxisRange1({ min: 0, max: 100 });
     setYAxisRange2({ min: 0, max: 100 });
@@ -374,7 +378,7 @@ export default function ArduinoPage() {
     <div className="p-6 bg-gray-50 min-h-screen">
       <div className="max-w-7xl mx-auto">
         <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-          <h1 className="text-2xl font-bold mb-4 text-gray-800"></h1>
+          <h1 className="text-2xl font-bold mb-4 text-gray-800">Real-Time Arduino Data Dashboard</h1>
           
           <div className="flex items-center gap-4 mb-4">
             {!port ? (
@@ -414,13 +418,14 @@ export default function ArduinoPage() {
               <span>Status: {isReading ? 'Connected' : 'Disconnected'}</span>
             </div>
             <div>Data Rate: {dataRate} msg/sec</div>
+            <div>Sampling Rate: {samplingRate} Hz</div>
             <div>Plot Points: {plotData.length}</div>
-            <div>Max Points: {plotData.length > 100 ? '250' : '150'}</div>
+            <div>Max Points: 500</div>
           </div>
         </div>
 
         <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-          {/* <div className="flex justify-between items-center mb-4">
+          <div className="flex justify-between items-center mb-4">
             <h2 className="text-lg font-semibold text-gray-800">Value 1 ($ Value) - Real-Time Pulse Chart</h2>
             <div className="flex items-center gap-4">
               <label className="flex items-center gap-2 text-sm">
@@ -439,19 +444,21 @@ export default function ArduinoPage() {
                 Reset Zoom
               </button>
             </div>
-          </div> */}
+          </div>
           <div className="overflow-x-auto">
-            <LineChart width={1000} height={350} data={plotData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+            <LineChart width={1200} height={400} data={plotData}>
+              <CartesianGrid strokeDasharray="2 2" stroke="#f0f0f0" />
               <XAxis 
                 dataKey="timestamp" 
                 stroke="#666"
-                tick={{ fontSize: 12 }}
+                tick={{ fontSize: 11 }}
                 domain={['dataMin', 'dataMax']}
+                type="number"
+                scale="linear"
               />
               <YAxis 
                 stroke="#666"
-                tick={{ fontSize: 12 }}
+                tick={{ fontSize: 11 }}
                 domain={autoZoom1 ? [yAxisRange1.min, yAxisRange1.max] : ['dataMin', 'dataMax']}
                 tickFormatter={(value) => value.toFixed(0)}
               />
@@ -459,19 +466,21 @@ export default function ArduinoPage() {
                 contentStyle={{ 
                   backgroundColor: '#f8f9fa', 
                   border: '1px solid #dee2e6',
-                  borderRadius: '8px'
+                  borderRadius: '6px',
+                  fontSize: '12px'
                 }}
                 formatter={(value, name) => [value.toFixed(0), name]}
               />
               <Legend />
               <Line 
-                type="monotone" 
+                type="linear" 
                 dataKey="value1" 
-                stroke="#3b82f6" 
-                name="$ Value (Pulse)"
-                strokeWidth={2}
+                stroke="#10b981" 
+                name="Pulse Signal"
+                strokeWidth={1.5}
                 dot={false}
                 isAnimationActive={false}
+                connectNulls={false}
               />
             </LineChart>
           </div>
@@ -482,12 +491,14 @@ export default function ArduinoPage() {
                 Current Value: <span className="font-bold text-blue-600">{plotData[plotData.length - 1]?.value1 || 0}</span>
               </span>
             )}
-            
+            <span className="ml-4 text-xs">
+              Window: {plotData.length <= 50 ? plotData.length : plotData.length <= 150 ? Math.floor(plotData.length * 0.9) : 150} pts
+            </span>
           </div>
         </div>
 
         <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-          {/* <div className="flex justify-between items-center mb-4">
+          <div className="flex justify-between items-center mb-4">
             <h2 className="text-lg font-semibold text-gray-800">Value 2 (& Value) - Real-Time Pulse Chart</h2>
             <div className="flex items-center gap-4">
               <label className="flex items-center gap-2 text-sm">
@@ -506,19 +517,21 @@ export default function ArduinoPage() {
                 Reset Zoom
               </button>
             </div>
-          </div> */}
+          </div>
           <div className="overflow-x-auto">
-            <LineChart width={1000} height={350} data={plotData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+            <LineChart width={1200} height={400} data={plotData}>
+              <CartesianGrid strokeDasharray="2 2" stroke="#f0f0f0" />
               <XAxis 
                 dataKey="timestamp" 
                 stroke="#666"
-                tick={{ fontSize: 12 }}
+                tick={{ fontSize: 11 }}
                 domain={['dataMin', 'dataMax']}
+                type="number"
+                scale="linear"
               />
               <YAxis 
                 stroke="#666"
-                tick={{ fontSize: 12 }}
+                tick={{ fontSize: 11 }}
                 domain={autoZoom2 ? [yAxisRange2.min, yAxisRange2.max] : ['dataMin', 'dataMax']}
                 tickFormatter={(value) => value.toFixed(0)}
               />
@@ -526,19 +539,21 @@ export default function ArduinoPage() {
                 contentStyle={{ 
                   backgroundColor: '#f8f9fa', 
                   border: '1px solid #dee2e6',
-                  borderRadius: '8px'
+                  borderRadius: '6px',
+                  fontSize: '12px'
                 }}
                 formatter={(value, name) => [value.toFixed(0), name]}
               />
               <Legend />
               <Line 
-                type="monotone" 
+                type="linear" 
                 dataKey="value2" 
-                stroke="#10b981" 
-                name="& Value (Pulse)"
-                strokeWidth={2}
+                stroke="#f59e0b" 
+                name="Pulse Signal 2"
+                strokeWidth={1.5}
                 dot={false}
                 isAnimationActive={false}
+                connectNulls={false}
               />
             </LineChart>
           </div>
@@ -549,7 +564,9 @@ export default function ArduinoPage() {
                 Current Value: <span className="font-bold text-green-600">{plotData[plotData.length - 1]?.value2 || 0}</span>
               </span>
             )}
-            
+            <span className="ml-4 text-xs">
+              Window: {plotData.length <= 50 ? plotData.length : plotData.length <= 150 ? Math.floor(plotData.length * 0.9) : 150} pts
+            </span>
           </div>
         </div>
 
@@ -595,7 +612,7 @@ export default function ArduinoPage() {
                     </div>
                     <div className="flex justify-between text-sm">
                       <span>Adaptive Window:</span>
-                      <span>{plotData.length <= 20 ? plotData.length : plotData.length <= 50 ? Math.floor(plotData.length * 0.8) : plotData.length <= 100 ? 40 : 60} pts</span>
+                      <span>{plotData.length <= 50 ? plotData.length : plotData.length <= 150 ? Math.floor(plotData.length * 0.9) : 150} pts</span>
                     </div>
                   </div>
                 </>
