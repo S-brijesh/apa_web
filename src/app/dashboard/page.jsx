@@ -56,7 +56,7 @@ export default function HealthDashboard() {
       return;
     }
     if( tabName === "tests") {
-      router.push("/arduino_v2");
+      router.push("/recordTest");
       return;
       
 
