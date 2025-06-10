@@ -6,15 +6,12 @@ import { User, UserPlus, Activity, ArrowLeft, Heart } from "lucide-react";
 import { db2 } from "../lib/firebase2";
 import Image from 'next/image';
 import { collection, addDoc, Timestamp } from "firebase/firestore";
-import Link from 'next/link';
+import Navbar from '../../components/Navbar';
 import useAuthProtection from '../../hooks/useAuthProtection';
 
 export default function HealthDashboard() {
+  // Move ALL hooks to the top, before any conditional logic
   const checkingAuth = useAuthProtection();
-
-  if (checkingAuth) {
-    return <div className="p-6 text-center text-white-500">Checking authentication...</div>; 
-  }
   const [activeTab, setActiveTab] = useState("dashboard");
   const [selectedButton, setSelectedButton] = useState(null);
   const [formStep, setFormStep] = useState(1);
@@ -48,10 +45,21 @@ export default function HealthDashboard() {
     setActiveTab("dashboard");
   }, []);
 
+  // Now handle the conditional return AFTER all hooks are defined
+  if (checkingAuth) {
+    return <div className="p-6 text-center text-white-500">Checking authentication...</div>; 
+  }
+
   const handleButtonClick = (tabName, buttonId) => {
     if (tabName === "patients") {
       router.push("/patient");
       return;
+    }
+    if( tabName === "tests") {
+      router.push("/arduino_v2");
+      return;
+      
+
     }
 
     setActiveTab(tabName);
@@ -151,8 +159,10 @@ export default function HealthDashboard() {
       alert("Failed to add patient.");
     }
   };
-
+  
   return (
+    <>
+    <Navbar/>
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
       {/* Header */}
       {/* <div className="bg-white shadow-sm border-b">
@@ -163,7 +173,7 @@ export default function HealthDashboard() {
           </div>
         </div>
       </div> */}
-
+      
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 min-h-[calc(100vh-12rem)]">
@@ -247,6 +257,7 @@ export default function HealthDashboard() {
         </div>
       </div>
     </div>
+    </>
   );
 }
 

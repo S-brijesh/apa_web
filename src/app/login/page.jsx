@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'; //  If you're using App Router. Use
 import { auth } from '../lib/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import Image from 'next/image';
-
+import NavbarBefore from '../../components/NavbarBefore'; 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -47,8 +47,11 @@ export default function LoginPage() {
   };
 
   return (
+    <>
+    <NavbarBefore />
     <div className="flex h-screen font-sans">
       {/* Left Form Section */}
+      
       <div className="w-1/2 p-16 bg-white flex flex-col justify-center">
         <h1 className="text-2xl font-semibold text-indigo-700 mb-10 text-center">LOG IN</h1>
 
@@ -111,5 +114,6 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+    </>
   );
 }
